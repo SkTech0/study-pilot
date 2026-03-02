@@ -93,6 +93,8 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("UserId", "CreatedAtUtc");
+
                     b.ToTable("Documents", (string)null);
                 });
 
@@ -162,6 +164,8 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("QuizId1");
 
+                    b.HasIndex("Status");
+
                     b.HasIndex(new[] { "QuizId", "QuestionIndex" }, "IX_Questions_QuizId_QuestionIndex")
                         .IsUnique();
 
@@ -189,6 +193,8 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedForUserId");
 
                     b.HasIndex("DocumentId");
 
@@ -346,6 +352,57 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("RefreshTokens", (string)null);
+                });
+
+            modelBuilder.Entity("StudyPilot.Infrastructure.Persistence.BackgroundJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClaimedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("ClaimedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("MaxRetries")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("NextRetryAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("Status", "CreatedAtUtc");
+
+                    b.HasIndex("Status", "NextRetryAtUtc");
+
+                    b.ToTable("BackgroundJobs", (string)null);
                 });
 
             modelBuilder.Entity("StudyPilot.Domain.Entities.Concept", b =>

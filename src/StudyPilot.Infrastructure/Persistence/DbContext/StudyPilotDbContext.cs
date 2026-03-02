@@ -18,6 +18,7 @@ public sealed class StudyPilotDbContext : Microsoft.EntityFrameworkCore.DbContex
     public DbSet<UserAnswer> UserAnswers => Set<UserAnswer>();
     public DbSet<UserConceptProgress> UserConceptProgresses => Set<UserConceptProgress>();
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
+    public DbSet<BackgroundJob> BackgroundJobs => Set<BackgroundJob>();
     internal DbSet<QuestionConceptLink> QuestionConceptLinks => Set<QuestionConceptLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

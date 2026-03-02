@@ -43,7 +43,7 @@ public sealed class UploadDocumentCommandHandler : IRequestHandler<UploadDocumen
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var correlationId = _correlationIdAccessor.Get();
-        _jobQueue.Enqueue(_jobFactory.CreateProcessDocumentJob(document.Id, correlationId));
+        await _jobQueue.EnqueueDocumentProcessingAsync(document.Id, correlationId, cancellationToken);
         return Result<UploadDocumentResult>.Success(new UploadDocumentResult(document.Id));
     }
 }

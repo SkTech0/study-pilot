@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-chat"
     openrouter_api_key: str = ""
-    openrouter_model: str = "google/gemini-2.0-flash-exp:free"
+    openrouter_model: str = "google/gemini-2.5-flash"  # free alternative: google/gemini-2.0-flash-exp:free
     llm_provider: str = "gemini"  # legacy: "gemini" or "openai"
-    llm_fallback_chain: str = "gemini,deepseek,openrouter"  # comma-separated; first is primary
+    llm_fallback_chain: str = "gemini,deepseek,openrouter,openai"  # comma-separated; first is primary; 429/failure tries next
     request_timeout: float = 60.0

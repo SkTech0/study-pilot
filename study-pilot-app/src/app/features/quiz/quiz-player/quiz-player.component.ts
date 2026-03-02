@@ -16,6 +16,11 @@ import { EnterpriseApiError } from '@core/http/enterprise-api-error';
         <div class="card text-center">
           <h2 class="text-xl font-semibold text-gray-900 mb-2">Quiz complete</h2>
           <p class="text-gray-600">Score: {{ r.correctCount }} / {{ r.totalCount }} ({{ r.totalCount ? (r.correctCount / r.totalCount * 100) : 0 | number:'1.0-0' }}%)</p>
+          @if (r.totalCount && r.correctCount / r.totalCount >= 0.8) {
+            <p class="text-green-600 text-sm font-medium mt-1">Nice work!</p>
+          } @else if (r.totalCount && r.correctCount / r.totalCount >= 0.5) {
+            <p class="text-gray-600 text-sm mt-1">Review your weak topics to improve next time.</p>
+          }
           @if (r.questionResults?.length && session(); as s) {
             <div class="mt-6 text-left border-t pt-4">
               <h3 class="text-sm font-semibold text-gray-700 mb-2">Answers</h3>
@@ -61,12 +66,13 @@ import { EnterpriseApiError } from '@core/http/enterprise-api-error';
               <span class="block h-4 bg-gray-100 rounded w-1/2"></span>
               <span class="block h-4 bg-gray-100 rounded w-2/3"></span>
             </div>
-            <p class="mt-4 text-gray-500">{{ isRetrying(currentIndex()) ? 'Retrying…' : 'Loading question…' }}</p>
+            <p class="mt-4 text-gray-500">{{ isRetrying(currentIndex()) ? 'Retrying…' : 'Preparing your question…' }}</p>
           </div>
         } @else if (isFailed(currentIndex())) {
           <div class="card py-8 text-center">
-            <h3 class="text-lg font-semibold text-gray-900 mb-2">Question could not be loaded</h3>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">This question couldn't be generated</h3>
             <p class="text-gray-600 mb-4">{{ getFailedMessage(currentIndex()) }}</p>
+            <p class="text-sm text-gray-500 mb-4">You can retry or continue to the next question.</p>
             <button type="button" (click)="retryQuestion(currentIndex())" class="btn-primary">Retry</button>
           </div>
         } @else if (currentQuestion()) {
@@ -100,13 +106,14 @@ import { EnterpriseApiError } from '@core/http/enterprise-api-error';
           </div>
         } @else {
           <div class="card py-8 text-center">
-            <p class="text-gray-500 mb-4">Requesting question…</p>
+            <p class="text-gray-500 mb-4">Preparing your question…</p>
           </div>
         }
       } @else if (startError()) {
         <div class="card text-center py-12">
-          <h2 class="text-lg font-semibold text-gray-900 mb-2">Could not start quiz</h2>
-          <p class="text-gray-600 mb-6">{{ startError() }}</p>
+          <h2 class="text-lg font-semibold text-gray-900 mb-2">Couldn't start quiz</h2>
+          <p class="text-gray-600 mb-2">{{ startError() }}</p>
+          <p class="text-sm text-gray-500 mb-6">Make sure the document has finished processing, then try again.</p>
           <button type="button" (click)="goDashboard()" class="btn-primary">Back to dashboard</button>
         </div>
       } @else {
@@ -115,7 +122,7 @@ import { EnterpriseApiError } from '@core/http/enterprise-api-error';
             <span class="block h-4 bg-gray-200 rounded w-48"></span>
             <span class="block h-4 bg-gray-100 rounded w-32"></span>
           </div>
-          <p class="mt-4 text-gray-500">Loading quiz…</p>
+          <p class="mt-4 text-gray-500">Setting up your quiz…</p>
         </div>
       }
     </div>

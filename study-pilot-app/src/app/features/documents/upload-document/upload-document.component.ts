@@ -35,10 +35,11 @@ function formatFileSize(bytes: number): string {
 
       @switch (uploadStatus()) {
         @case ('success') {
-          <div class="rounded-xl border-2 border-green-200 bg-green-50 p-5 text-green-800" role="status">
-            <p class="font-medium">Document uploaded</p>
-            <p class="mt-1 text-sm opacity-90">Processing has started. You can start a quiz once it's ready.</p>
-            <p class="mt-2 text-sm opacity-80">Taking you to your documents…</p>
+          <div class="rounded-xl border-2 border-green-200 bg-green-50 p-6 text-green-800 text-center" role="status">
+            <span class="text-4xl font-bold text-green-600 leading-none" aria-hidden="true">✓</span>
+            <p class="font-semibold mt-3">Document uploaded</p>
+            <p class="mt-1 text-sm opacity-90">We're analyzing your document and extracting key concepts. You'll be able to start a quiz in a moment.</p>
+            <p class="mt-3 text-sm opacity-80">Taking you to your documents…</p>
           </div>
         }
         @default {
@@ -82,7 +83,7 @@ function formatFileSize(bytes: number): string {
                 <span class="upload-spinner h-5 w-5 shrink-0 rounded-full border-2 border-blue-300 border-t-blue-600" aria-hidden="true"></span>
                 <div>
                   <p class="text-sm font-medium text-blue-800">Uploading your document…</p>
-                  <p class="text-xs text-blue-700 mt-0.5">Please wait. Do not close this page.</p>
+                  <p class="text-xs text-blue-700 mt-0.5">This usually takes a few seconds. Don't close this page.</p>
                 </div>
               </div>
             </div>
@@ -106,7 +107,7 @@ function formatFileSize(bytes: number): string {
           @if (uploadStatus() === 'error' && errorMessage(); as msg) {
             <div class="mt-3 rounded-lg border border-red-200 bg-red-50 p-3" role="alert">
               <p class="text-sm font-medium text-red-800">{{ msg }}</p>
-              <p class="mt-1 text-xs text-red-600">You can try again or choose another file.</p>
+              <p class="mt-1 text-xs text-red-600">Try again or choose a different PDF (max 10 MB).</p>
             </div>
           }
         }

@@ -16,8 +16,9 @@ import { mapErrorsToFormControls } from '@core/utils/form-error-mapper';
     <div class="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <div class="w-full max-w-md card">
         <div class="text-center mb-6">
-          <h1 class="text-2xl font-semibold text-gray-900">Create account</h1>
-          <p class="mt-1 text-sm text-gray-500">Join StudyPilot to start learning with AI quizzes</p>
+          <p class="text-sm font-medium text-blue-600 tracking-wide">StudyPilot</p>
+          <h1 class="text-2xl font-semibold text-gray-900 mt-2">Create your account</h1>
+          <p class="mt-1 text-sm text-gray-500">Start learning in minutes with AI-powered quizzes</p>
         </div>
         <form [formGroup]="form" (ngSubmit)="onSubmit()">
           <div class="mb-4">

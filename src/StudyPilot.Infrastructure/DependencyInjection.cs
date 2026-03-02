@@ -55,14 +55,21 @@ public static class DependencyInjection
         services.AddScoped<IUsageGuardService, UsageGuardService>();
 
         services.Configure<AIServiceOptions>(config.GetSection(AIServiceOptions.SectionName));
+        services.AddSingleton(sp =>
+        {
+            var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AIServiceOptions>>().Value;
+            return new SemaphoreSlim(Math.Max(1, opts.MaxConcurrentRequests));
+        });
+        services.AddTransient<AiConcurrencyHandler>();
         services.AddHttpClient<IStudyPilotAIClient, StudyPilotAIClient>((sp, client) =>
         {
             var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AIServiceOptions>>().Value;
             client.BaseAddress = new Uri(opts.BaseUrl.TrimEnd('/') + "/");
             var timeoutSeconds = opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 60;
-            // Quiz generation can take 2–5+ min with many concepts or slow LLM; use at least 300s to avoid TimeoutRejectedException.
             client.Timeout = TimeSpan.FromSeconds(Math.Max(timeoutSeconds, 300));
-        }).AddStandardResilienceHandler(options =>
+        })
+        .AddHttpMessageHandler<AiConcurrencyHandler>()
+        .AddStandardResilienceHandler(options =>
         {
             // Quiz generation can take several minutes; use 5 min so AI has time to respond.
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(300);
@@ -81,9 +88,11 @@ public static class DependencyInjection
         services.Configure<StorageOptions>(config.GetSection(StorageOptions.SectionName));
         services.AddSingleton<IFileContentReader, LocalFileContentReader>();
 
-        services.AddSingleton<InMemoryBackgroundJobQueue>();
-        services.AddSingleton<IBackgroundJobQueue>(sp => sp.GetRequiredService<InMemoryBackgroundJobQueue>());
-        services.AddSingleton<IBackgroundQueueMetrics>(sp => sp.GetRequiredService<InMemoryBackgroundJobQueue>());
+        services.Configure<BackgroundJobOptions>(config.GetSection(BackgroundJobOptions.SectionName));
+        services.AddScoped<IBackgroundJobRepository, BackgroundJobRepository>();
+        services.AddSingleton<DbBackedBackgroundJobQueue>();
+        services.AddSingleton<IBackgroundJobQueue>(sp => sp.GetRequiredService<DbBackedBackgroundJobQueue>());
+        services.AddSingleton<IBackgroundQueueMetrics>(sp => sp.GetRequiredService<DbBackedBackgroundJobQueue>());
         services.AddSingleton<IDocumentProcessingJobFactory, DocumentProcessingJobFactory>();
         services.AddHostedService<BackgroundJobWorker>();
         services.AddHostedService<DatabaseMigrationHostedService>();

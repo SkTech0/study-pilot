@@ -33,6 +33,7 @@ public sealed class QuestionConfiguration : IEntityTypeConfiguration<Question>
             .HasColumnType("jsonb");
 
         builder.HasIndex(q => q.QuizId);
+        builder.HasIndex(q => q.Status);
         builder.HasIndex(q => new { q.QuizId, q.QuestionIndex }).IsUnique();
     }
 }

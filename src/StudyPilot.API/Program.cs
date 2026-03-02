@@ -88,7 +88,7 @@ StartupConfigurationValidator.Validate(builder.Configuration);
 
 var app = builder.Build();
 
-StudyPilotMetrics.SetQueueLengthProvider(() => app.Services.GetRequiredService<InMemoryBackgroundJobQueue>().QueuedCount);
+StudyPilotMetrics.SetQueueLengthProvider(() => app.Services.GetRequiredService<IBackgroundQueueMetrics>().QueuedCount);
 
 app.UseForwardedHeaders();
 app.UseCors();

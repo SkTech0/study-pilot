@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using StudyPilot.Application.Abstractions.AI;
+using StudyPilot.Application.Abstractions.Observability;
 using StudyPilot.Application.Abstractions.Persistence;
 using StudyPilot.Application.Common.Errors;
 using StudyPilot.Application.Common.Models;
@@ -11,21 +12,25 @@ namespace StudyPilot.Application.Quiz.GetQuizQuestion;
 
 public sealed class GetQuizQuestionQueryHandler : IRequestHandler<GetQuizQuestionQuery, Result<GetQuizQuestionResult>>
 {
+    private const int PreloadTimeoutSeconds = 90;
     private readonly IQuizRepository _quizRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IQuestionGenerationDispatcher _dispatcher;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ICorrelationIdAccessor? _correlationIdAccessor;
 
     public GetQuizQuestionQueryHandler(
         IQuizRepository quizRepository,
         IUnitOfWork unitOfWork,
         IQuestionGenerationDispatcher dispatcher,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        ICorrelationIdAccessor? correlationIdAccessor = null)
     {
         _quizRepository = quizRepository;
         _unitOfWork = unitOfWork;
         _dispatcher = dispatcher;
         _scopeFactory = scopeFactory;
+        _correlationIdAccessor = correlationIdAccessor;
     }
 
     public async Task<Result<GetQuizQuestionResult>> Handle(GetQuizQuestionQuery request, CancellationToken cancellationToken)
@@ -82,12 +87,22 @@ public sealed class GetQuizQuestionQueryHandler : IRequestHandler<GetQuizQuestio
         {
             var quizId = request.QuizId;
             var nextIndex = request.QuestionIndex + 1;
+            var correlationId = _correlationIdAccessor?.Get();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(PreloadTimeoutSeconds));
             _ = Task.Run(async () =>
             {
-                using var scope = _scopeFactory.CreateScope();
-                var disp = scope.ServiceProvider.GetRequiredService<IQuestionGenerationDispatcher>();
-                await disp.DispatchAsync(quizId, nextIndex, CancellationToken.None);
-            }, CancellationToken.None);
+                try
+                {
+                    await using var scope = _scopeFactory.CreateAsyncScope();
+                    var accessor = scope.ServiceProvider.GetService<ICorrelationIdAccessor>();
+                    if (!string.IsNullOrEmpty(correlationId))
+                        accessor?.Set(correlationId);
+                    var disp = scope.ServiceProvider.GetRequiredService<IQuestionGenerationDispatcher>();
+                    await disp.DispatchAsync(quizId, nextIndex, cts.Token);
+                }
+                catch (OperationCanceledException) { }
+                catch { /* Preload best-effort; avoid unobserved task exceptions */ }
+            }, cts.Token);
         }
 
         return result;

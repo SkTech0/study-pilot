@@ -16,8 +16,9 @@ import { mapErrorsToFormControls } from '@core/utils/form-error-mapper';
     <div class="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <div class="w-full max-w-md card">
         <div class="text-center mb-6">
-          <h1 class="text-2xl font-semibold text-gray-900">Welcome back</h1>
-          <p class="mt-1 text-sm text-gray-500">Sign in to continue to StudyPilot</p>
+          <p class="text-sm font-medium text-blue-600 tracking-wide">StudyPilot</p>
+          <h1 class="text-2xl font-semibold text-gray-900 mt-2">Welcome back</h1>
+          <p class="mt-1 text-sm text-gray-500">Sign in to pick up where you left off</p>
         </div>
         <form [formGroup]="form" (ngSubmit)="onSubmit()">
           <div class="mb-4">

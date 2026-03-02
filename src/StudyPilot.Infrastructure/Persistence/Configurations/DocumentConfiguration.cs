@@ -22,5 +22,6 @@ public sealed class DocumentConfiguration : IEntityTypeConfiguration<Document>
 
         builder.HasIndex(d => d.UserId);
         builder.HasIndex(d => d.ProcessingStatus);
+        builder.HasIndex(d => new { d.UserId, d.CreatedAtUtc });
     }
 }

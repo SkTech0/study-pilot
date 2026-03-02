@@ -47,22 +47,24 @@ import { DocumentPollingService } from '@core/services/document-polling.service'
                           [class.text-green-800]="doc.status === 'Completed'"
                           [class.bg-red-100]="doc.status === 'Failed'"
                           [class.text-red-800]="doc.status === 'Failed'">
-                      {{ doc.status }}
+                      {{ doc.status === 'Processing' ? 'Analyzing…' : doc.status === 'Pending' ? 'In queue' : doc.status === 'Completed' ? 'Ready' : doc.status }}
                     </span>
                   </div>
                 </div>
-                @if (doc.status === 'Failed' && doc.failureReason) {
+                @if (doc.status === 'Failed') {
                   <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" role="alert">
-                    {{ doc.failureReason }}
+                    {{ doc.failureReason || "We couldn't process this document. You can try uploading it again." }}
                   </p>
                 }
               </li>
             }
           </ul>
           @if (documents().length === 0) {
-            <div class="text-center py-10">
-              <p class="text-gray-500">No documents yet.</p>
-              <a routerLink="/documents/upload" class="btn-primary mt-3 inline-block">Upload your first document</a>
+            <div class="text-center py-12">
+              <span class="text-4xl text-gray-300 block mb-3" aria-hidden="true">📄</span>
+              <p class="text-gray-600 font-medium">No documents yet</p>
+              <p class="text-gray-500 text-sm mt-1">Upload a PDF and we'll turn it into a quiz in about a minute.</p>
+              <a routerLink="/documents/upload" class="btn-primary mt-4 inline-block">Upload your first document</a>
             </div>
           }
         </div>

@@ -41,4 +41,20 @@ public sealed class DocumentRepository : IDocumentRepository
         if (updated == 0) return null;
         return await _db.Documents.FirstOrDefaultAsync(d => d.Id == documentId, cancellationToken);
     }
+
+    public async Task ResetToPendingAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        await _db.Documents
+            .Where(d => d.Id == documentId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.ProcessingStatus, ProcessingStatus.Pending)
+                .SetProperty(d => d.FailureReason, (string?)null), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetStuckProcessingDocumentIdsAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default) =>
+        await _db.Documents
+            .AsNoTracking()
+            .Where(d => d.ProcessingStatus == ProcessingStatus.Processing && d.UpdatedAtUtc < cutoffUtc)
+            .Select(d => d.Id)
+            .ToListAsync(cancellationToken);
 }

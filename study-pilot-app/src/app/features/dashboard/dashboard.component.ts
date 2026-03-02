@@ -10,15 +10,15 @@ import { StudyPilotApiService, DocumentItem, WeakTopic } from '@core/services/st
   template: `
     <div class="p-4 sm:p-6 max-w-4xl mx-auto">
       <div class="mb-8">
-        <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900">Dashboard</h1>
-        <p class="mt-1 text-gray-500">Overview of your study materials and progress</p>
+        <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900">Your dashboard</h1>
+        <p class="mt-1 text-gray-500">Your study materials and progress at a glance</p>
       </div>
       <div class="grid gap-6 md:grid-cols-2">
         <div class="card">
           <h2 class="text-lg font-medium text-gray-900 mb-3">Quick actions</h2>
           <div class="flex flex-col gap-2">
-            <a routerLink="/documents/upload" class="btn-primary text-center">Upload document</a>
-            <a routerLink="/documents" class="btn-secondary text-center">View documents &amp; start quiz</a>
+            <a routerLink="/documents/upload" class="btn-primary text-center">Upload a PDF</a>
+            <a routerLink="/documents" class="btn-secondary text-center">My documents &amp; quizzes</a>
           </div>
         </div>
         <div class="card">
@@ -48,12 +48,16 @@ import { StudyPilotApiService, DocumentItem, WeakTopic } from '@core/services/st
                       [class.bg-green-100]="doc.status === 'Completed'"
                       [class.text-green-800]="doc.status === 'Completed'"
                       [class.bg-red-100]="doc.status === 'Failed'"
-                      [class.text-red-800]="doc.status === 'Failed'">{{ doc.status }}</span>
+                      [class.text-red-800]="doc.status === 'Failed'">{{ doc.status === 'Processing' ? 'Analyzing…' : doc.status === 'Pending' ? 'In queue' : doc.status === 'Completed' ? 'Ready' : doc.status }}</span>
               </li>
             }
           </ul>
           @if (recentDocs().length === 0) {
-            <p class="text-gray-500 text-sm py-2">No documents yet. Upload a PDF to get started.</p>
+            <div class="text-center py-6">
+              <p class="text-gray-500 text-sm">You haven't uploaded any documents yet.</p>
+              <p class="text-gray-400 text-xs mt-1">Upload a PDF to generate quizzes and track your progress.</p>
+              <a routerLink="/documents/upload" class="btn-primary mt-3 inline-block text-sm">Upload your first document</a>
+            </div>
           }
         }
       </div>
@@ -78,7 +82,10 @@ import { StudyPilotApiService, DocumentItem, WeakTopic } from '@core/services/st
             }
           </ul>
           @if (weakTopics().length === 0) {
-            <p class="text-gray-500 text-sm py-2">No weak topics yet. Complete quizzes to see your progress.</p>
+            <div class="text-center py-6">
+              <p class="text-gray-500 text-sm">No weak topics yet.</p>
+              <p class="text-gray-400 text-xs mt-1">Complete a quiz to see which topics need more practice.</p>
+            </div>
           }
         }
       </div>

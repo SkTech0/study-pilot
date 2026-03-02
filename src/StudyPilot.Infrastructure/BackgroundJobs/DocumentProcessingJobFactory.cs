@@ -71,11 +71,8 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
                 await conceptRepo.DeleteByDocumentIdAsync(documentId, ct);
                 await unitOfWork.SaveChangesAsync(ct);
 
-                foreach (var item in concepts)
-                {
-                    var concept = new Concept(document.Id, item.Name, item.Description);
-                    await conceptRepo.AddAsync(concept, ct);
-                }
+                var conceptEntities = concepts.Select(item => new Concept(document.Id, item.Name, item.Description)).ToList();
+                await conceptRepo.AddRangeAsync(conceptEntities, ct);
                 await unitOfWork.SaveChangesAsync(ct);
 
                 document.SetProcessingStatus(ProcessingStatus.Completed);

@@ -210,6 +210,11 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Documents_UserId_CreatedAtUtc",
+                table: "Documents",
+                columns: new[] { "UserId", "CreatedAtUtc" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Questions_QuizId",
                 table: "Questions",
                 column: "QuizId");
@@ -226,9 +231,19 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
                 column: "QuizId1");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Questions_Status",
+                table: "Questions",
+                column: "Status");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Quizzes_DocumentId",
                 table: "Quizzes",
                 column: "DocumentId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Quizzes_CreatedForUserId",
+                table: "Quizzes",
+                column: "CreatedForUserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_RefreshTokens_Token",
@@ -270,11 +285,50 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
                 table: "Users",
                 column: "Email",
                 unique: true);
+
+            migrationBuilder.CreateTable(
+                name: "BackgroundJobs",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    DocumentId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CorrelationId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    ClaimedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ClaimedBy = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    RetryCount = table.Column<int>(type: "integer", nullable: false),
+                    MaxRetries = table.Column<int>(type: "integer", nullable: false),
+                    NextRetryAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ErrorMessage = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BackgroundJobs", x => x.Id);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BackgroundJobs_Status",
+                table: "BackgroundJobs",
+                column: "Status");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BackgroundJobs_Status_CreatedAtUtc",
+                table: "BackgroundJobs",
+                columns: new[] { "Status", "CreatedAtUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BackgroundJobs_Status_NextRetryAtUtc",
+                table: "BackgroundJobs",
+                columns: new[] { "Status", "NextRetryAtUtc" });
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "BackgroundJobs");
+
             migrationBuilder.DropTable(
                 name: "Concepts");
 

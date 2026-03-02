@@ -18,6 +18,7 @@ public sealed class QuizConfiguration : IEntityTypeConfiguration<Domain.Entities
         builder.Property(q => q.TotalQuestionCount);
 
         builder.HasIndex(q => q.DocumentId);
+        builder.HasIndex(q => q.CreatedForUserId);
         var questionRelationship = builder.HasMany(typeof(Domain.Entities.Question))
             .WithOne()
             .HasForeignKey(nameof(Domain.Entities.Question.QuizId))
