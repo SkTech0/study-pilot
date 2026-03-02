@@ -12,10 +12,10 @@ import { EnterpriseApiError } from '@core/http/enterprise-api-error';
   imports: [DecimalPipe],
   template: `
     <div class="p-4 sm:p-6 max-w-2xl mx-auto">
-      @if (result()) {
+      @if (result(); as r) {
         <div class="card text-center">
           <h2 class="text-xl font-semibold text-gray-900 mb-2">Quiz complete</h2>
-          <p class="text-gray-600">Score: {{ result()!.correctCount }} / {{ result()!.totalCount }} ({{ result()!.totalCount ? (result()!.correctCount / result()!.totalCount * 100) : 0 | number:'1.0-0' }}%)</p>
+          <p class="text-gray-600">Score: {{ r.correctCount }} / {{ r.totalCount }} ({{ r.totalCount ? (r.correctCount / r.totalCount * 100) : 0 | number:'1.0-0' }}%)</p>
           <button (click)="goDashboard()" class="btn-primary mt-6">Back to dashboard</button>
         </div>
       } @else if (session() && session()!.questions.length === 0) {
@@ -154,7 +154,11 @@ export class QuizPlayerComponent implements OnInit {
     });
     this.api.submitQuiz({ quizId: s.quizId, answers }).subscribe({
       next: r => {
-        this.state.setResult(r);
+        const correctCount = (r as { correctCount?: number; CorrectCount?: number }).correctCount
+          ?? (r as { correctCount?: number; CorrectCount?: number }).CorrectCount ?? 0;
+        const totalCount = (r as { totalCount?: number; TotalCount?: number }).totalCount
+          ?? (r as { totalCount?: number; TotalCount?: number }).TotalCount ?? s.questions.length;
+        this.state.setResult({ correctCount, totalCount });
       },
       error: () => this.router.navigate(['/dashboard'])
     });

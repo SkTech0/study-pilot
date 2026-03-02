@@ -72,7 +72,7 @@ import { StudyPilotApiService, DocumentItem, WeakTopic } from '@core/services/st
           <ul class="divide-y divide-gray-200">
             @for (t of weakTopics(); track t.conceptId) {
               <li class="py-3 flex justify-between items-center gap-2">
-                <span class="text-gray-900">{{ t.conceptName }}</span>
+                <span class="text-gray-900">{{ t.name }}</span>
                 <span class="text-sm font-medium text-gray-600">{{ t.masteryScore }}%</span>
               </li>
             }

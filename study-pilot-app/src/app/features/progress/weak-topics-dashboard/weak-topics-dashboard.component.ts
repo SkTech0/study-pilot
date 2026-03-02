@@ -26,7 +26,7 @@ import { StudyPilotApiService, WeakTopic } from '@core/services/study-pilot-api.
           <ul class="space-y-4">
             @for (t of topics(); track t.conceptId) {
               <li class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <span class="font-medium text-gray-900">{{ t.conceptName }}</span>
+                <span class="font-medium text-gray-900">{{ t.name }}</span>
                 <div class="flex items-center gap-3">
                   <div class="w-24 sm:w-32 h-2.5 bg-gray-200 rounded-full overflow-hidden" role="progressbar" [attr.aria-valuenow]="t.masteryScore" aria-valuemin="0" aria-valuemax="100">
                     <div class="h-full bg-blue-600 rounded-full transition-all" [style.width.%]="t.masteryScore"></div>

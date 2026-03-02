@@ -53,7 +53,8 @@ export interface QuizResult {
 
 export interface WeakTopic {
   conceptId: string;
-  conceptName: string;
+  /** Topic name from API (field is "name" in response). */
+  name: string;
   masteryScore: number;
 }
 
