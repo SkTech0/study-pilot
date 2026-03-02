@@ -1,5 +1,5 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
-import { RouterOutlet, RouterLink } from '@angular/router';
+import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { ToastComponent } from './shared/components/toast/toast.component';
 import { AuthService } from './core/auth/auth.service';
 import { ErrorBannerService } from './core/services/error-banner.service';
@@ -8,21 +8,32 @@ import { ErrorBannerService } from './core/services/error-banner.service';
   selector: 'app-root',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet, RouterLink, ToastComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ToastComponent],
   template: `
     @if (banner.currentSystemError(); as sys) {
-      <div class="bg-red-600 text-white px-4 py-2 flex items-center justify-between">
-        <span>{{ sys.message }}@if (sys.correlationId) { (Ref: {{ sys.correlationId }}) }</span>
-        <button type="button" (click)="banner.clear()" class="underline">Dismiss</button>
+      <div class="bg-amber-600 text-white px-4 py-3 flex items-center justify-between gap-4 shadow-sm" role="alert">
+        <span class="flex-1 min-w-0">{{ sys.message }}@if (sys.correlationId) { <span class="opacity-90 text-sm">(Ref: {{ sys.correlationId }})</span> }</span>
+        <button type="button" (click)="banner.clear()" class="shrink-0 font-medium underline hover:no-underline focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-amber-600 rounded">Dismiss</button>
       </div>
     }
     @if (auth.token) {
-      <nav class="border-b bg-white px-4 py-2 flex gap-4 items-center">
-        <a routerLink="/dashboard" class="text-blue-600 hover:underline">Dashboard</a>
-        <a routerLink="/documents" class="text-blue-600 hover:underline">Documents</a>
-        <a routerLink="/progress" class="text-blue-600 hover:underline">Progress</a>
-        <a routerLink="/quiz/start" class="text-blue-600 hover:underline">Quiz</a>
-        <button type="button" (click)="auth.logout()" class="text-gray-600 hover:underline ml-auto">Logout</button>
+      <nav class="sticky top-0 z-40 border-b border-gray-200 bg-white shadow-sm" aria-label="Main">
+        <div class="mx-auto max-w-6xl px-4 sm:px-6">
+          <div class="flex h-14 items-center justify-between gap-4">
+            <div class="flex items-center gap-1">
+              <a routerLink="/dashboard" routerLinkActive="bg-blue-50 text-blue-700 font-medium" [routerLinkActiveOptions]="{ exact: true }"
+                 class="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors">Dashboard</a>
+              <a routerLink="/documents" routerLinkActive="bg-blue-50 text-blue-700 font-medium" [routerLinkActiveOptions]="{ paths: 'subset', matrixParams: 'ignored', queryParams: 'ignored', fragment: 'ignored' }"
+                 class="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors">Documents</a>
+              <a routerLink="/progress" routerLinkActive="bg-blue-50 text-blue-700 font-medium"
+                 class="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors">Progress</a>
+            </div>
+            <button type="button" (click)="auth.logout()"
+                    class="rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+              Logout
+            </button>
+          </div>
+        </div>
       </nav>
     }
     <main class="min-h-screen">
