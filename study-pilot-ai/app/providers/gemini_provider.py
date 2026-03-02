@@ -16,27 +16,27 @@ def _is_429(e: BaseException) -> bool:
     return isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429
 
 
+# Short wait on 429 so we can fail over to next provider quickly (user doesn't notice).
+_GEMINI_429_WAIT_SEC = 2.0
+_GEMINI_429_MAX_ATTEMPTS = 2  # One quick retry, then reraise so FallbackAdapter tries next model.
+
+
 def _wait_429(retry_state):
-    """Wait Retry-After seconds if present, else exponential backoff (15s, 30s, 60s, …)."""
+    """Brief wait on 429 so fallback chain can try next provider without long delay."""
     exc = retry_state.outcome.exception() if retry_state.outcome else None
     if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
         ra = exc.response.headers.get("retry-after")
         if ra and str(ra).isdigit():
-            return float(ra)
-    # 15, 30, 60, 120, 120, …
-    attempt = retry_state.attempt_number
-    return min(15 * (2 ** min(attempt - 1, 3)), 120)
+            return min(float(ra), _GEMINI_429_WAIT_SEC)  # Cap so we don't block fallback
+    return _GEMINI_429_WAIT_SEC
 
 
 def _before_sleep_429(retry_state):
-    """Log a clear message when backing off on 429."""
-    wait = _wait_429(retry_state)
+    """Log and then reraise after brief retry so adapter can switch to next provider."""
     attempt = retry_state.attempt_number
     logger.warning(
-        "Gemini rate limit (429). Retrying in %.0fs (attempt %d/8). "
-        "If this persists, wait a few minutes or use an API key with higher quota.",
-        wait,
-        attempt,
+        "Gemini rate limit (429). Retrying once in %.0fs, then failing over to next provider.",
+        _GEMINI_429_WAIT_SEC,
     )
 
 
@@ -61,7 +61,7 @@ class GeminiProvider(LLMProvider):
 
     @retry(
         retry=retry_if_exception(_is_429),
-        stop=stop_after_attempt(8),
+        stop=stop_after_attempt(_GEMINI_429_MAX_ATTEMPTS),
         wait=_wait_429,
         before_sleep=_before_sleep_429,
         reraise=True,

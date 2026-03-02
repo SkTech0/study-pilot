@@ -1,10 +1,9 @@
 """OpenRouter API provider (multi-model gateway, OpenAI-compatible)."""
-import json
 import logging
 import os
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.core.config import Settings
 from app.prompts import get_extract_concepts_prompt, get_generate_quiz_prompt
@@ -16,6 +15,14 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://openrouter.ai/api/v1"
 
 
+def _retryable(e: BaseException) -> bool:
+    """Retry only on 5xx or 429; fail fast on 4xx (e.g. 404 = bad model id)."""
+    if not isinstance(e, httpx.HTTPStatusError):
+        return False
+    code = e.response.status_code
+    return code == 429 or code >= 500
+
+
 class OpenRouterProvider(LLMProvider):
     """OpenRouter gateway: one API key, many models. Uses OPENROUTER_API_KEY and OPENROUTER_MODEL."""
 
@@ -23,10 +30,14 @@ class OpenRouterProvider(LLMProvider):
         self._api_key = (
             (settings.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")).strip()
         )
-        self._model = settings.openrouter_model or "google/gemini-2.0-flash-exp:free"
+        self._model = settings.openrouter_model or "google/gemini-2.5-flash"
         self._timeout = settings.request_timeout
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
+    @retry(
+        retry=retry_if_exception(_retryable),
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=5),
+    )
     async def _chat(self, messages: list[dict]) -> str:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             r = await client.post(

@@ -42,7 +42,12 @@ This opens three windows: AI service (port 8000), .NET API (port 5024), and fron
 **Before that**, ensure PostgreSQL is running and the database exists (see below).
 
 ### 1. PostgreSQL
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = 'StudyPilot'
+  AND pid <> pg_backend_pid();
 
+  DROP DATABASE "StudyPilot";
 Install and start PostgreSQL, then create the DB and user. **PostgreSQL 15+** no longer grants create on `public` by default, so grant schema permissions too:
 
 ```sql
@@ -75,8 +80,8 @@ Connection is set in `appsettings.Development.json`: `Host=localhost;Database=St
 
 The Python service uses a **provider adapter**: it tries providers in the order of `LLM_FALLBACK_CHAIN`; only providers that have an API key are used. If you set only `GEMINI_API_KEY`, you get Gemini only. To use multiple providers (or a different primary), set the keys and chain in `study-pilot-ai/.env`:
 
-- **Chain (order = primary → fallback):** `LLM_FALLBACK_CHAIN=gemini,deepseek,openrouter` or e.g. `openai,gemini`. Only providers with a key are active.
-- **Keys:** Set one or more of `GEMINI_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY` (see `study-pilot-ai/.env.example`).
+- **Chain (order = primary → fallback):** `LLM_FALLBACK_CHAIN=gemini,deepseek,openrouter,openai`. On 429 or failure the next provider is tried quickly so users don’t notice.
+- **Keys:** Set one or more of `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY` (see `study-pilot-ai/.env.example`).
 
 At startup the service logs which chain is active, e.g. `LLM provider chain (adapter): gemini` or `LLM provider chain (adapter): openai, gemini`.
 
@@ -138,10 +143,12 @@ That starts the AI service (8000), .NET API (5024), and frontend (4200) in separ
 
 ### Gemini `429 Too Many Requests`
 
-The AI service uses Google’s Gemini API. On the free tier, rate limits can trigger 429. The app retries with backoff (15s, 30s, 60s, …); the request may eventually succeed.
+When the primary provider (e.g. Gemini) returns 429, the app does one short retry (~2s) then **fails over to the next provider** in `LLM_FALLBACK_CHAIN` (e.g. DeepSeek, OpenRouter, OpenAI) so users see minimal delay.
 
-- **If it keeps failing:** Wait a few minutes and try again, or use a Gemini API key with higher quota.
-- **To reduce 429s:** Avoid starting many documents or quizzes in quick succession.
+- **To get seamless switching:** Set multiple API keys in `study-pilot-ai/.env` (e.g. `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`). Only providers with keys set are used, in the order of `LLM_FALLBACK_CHAIN`.
+- **If you only have Gemini:** You’ll get one quick retry then an error; wait a few minutes or use a key with higher quota.
+
+- **OpenRouter 404:** If OpenRouter returns 404, the model ID may be invalid or deprecated. Set `OPENROUTER_MODEL` in `study-pilot-ai/.env` to a current model (e.g. `google/gemini-2.5-flash` or for free tier `google/gemini-2.0-flash-exp:free`). See [openrouter.ai/models](https://openrouter.ai/models).
 
 ---
 

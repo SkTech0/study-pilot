@@ -2,9 +2,20 @@
 import logging
 from typing import Sequence
 
+from tenacity import RetryError
+
 from app.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _unwrap_error(e: Exception) -> Exception:
+    """Unwrap tenacity RetryError so we raise the underlying cause (e.g. HTTPStatusError)."""
+    if isinstance(e, RetryError) and e.last_attempt.failed():
+        exc = e.last_attempt.exception()
+        if exc is not None:
+            return exc
+    return e
 
 
 class FallbackAdapter(LLMProvider):
@@ -29,11 +40,11 @@ class FallbackAdapter(LLMProvider):
                 logger.info("LLM extract_concepts succeeded with provider=%s", name)
                 return result
             except Exception as e:
-                last_error = e
+                last_error = _unwrap_error(e)
                 logger.warning(
-                    "LLM extract_concepts failed with provider=%s: %s. Trying next.",
+                    "LLM extract_concepts failed with provider=%s: %s. Failing over to next provider.",
                     name,
-                    e,
+                    last_error,
                     exc_info=False,
                 )
         if last_error:
@@ -49,11 +60,11 @@ class FallbackAdapter(LLMProvider):
                 logger.info("LLM generate_questions succeeded with provider=%s", name)
                 return result
             except Exception as e:
-                last_error = e
+                last_error = _unwrap_error(e)
                 logger.warning(
-                    "LLM generate_questions failed with provider=%s: %s. Trying next.",
+                    "LLM generate_questions failed with provider=%s: %s. Failing over to next provider.",
                     name,
-                    e,
+                    last_error,
                     exc_info=False,
                 )
         if last_error:

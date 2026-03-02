@@ -4,7 +4,7 @@ import logging
 import os
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.core.config import Settings
 from app.prompts import get_extract_concepts_prompt, get_generate_quiz_prompt
@@ -16,6 +16,14 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://api.deepseek.com"
 
 
+def _retryable(e: BaseException) -> bool:
+    """Retry only on 5xx or 429; fail fast on 4xx so fallback adapter can try next provider."""
+    if not isinstance(e, httpx.HTTPStatusError):
+        return False
+    code = e.response.status_code
+    return code == 429 or code >= 500
+
+
 class DeepSeekProvider(LLMProvider):
     """DeepSeek API via OpenAI-compatible endpoint. Uses DEEPSEEK_API_KEY or settings.deepseek_api_key."""
 
@@ -24,7 +32,11 @@ class DeepSeekProvider(LLMProvider):
         self._model = settings.deepseek_model or "deepseek-chat"
         self._timeout = settings.request_timeout
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
+    @retry(
+        retry=retry_if_exception(_retryable),
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=5),
+    )
     async def _chat(self, messages: list[dict]) -> str:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             r = await client.post(

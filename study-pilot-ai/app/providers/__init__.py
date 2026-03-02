@@ -32,7 +32,7 @@ def _has_openai_key(settings: Settings) -> bool:
 
 def _build_fallback_chain(settings: Settings) -> list[tuple[str, LLMProvider]]:
     """Build ordered list of (name, provider) from LLM_FALLBACK_CHAIN, only including providers with keys."""
-    chain_str = (settings.llm_fallback_chain or "").strip() or "gemini,deepseek,openrouter"
+    chain_str = (settings.llm_fallback_chain or "").strip() or "gemini,deepseek,openrouter,openai"
     names = [n.strip().lower() for n in chain_str.split(",") if n.strip()]
     out: list[tuple[str, LLMProvider]] = []
     for name in names:
