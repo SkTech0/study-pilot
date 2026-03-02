@@ -16,3 +16,4 @@ class Settings(BaseSettings):
     llm_provider: str = "gemini"  # legacy: "gemini" or "openai"
     llm_fallback_chain: str = "gemini,deepseek,openrouter,openai"  # comma-separated; first is primary; 429/failure tries next
     request_timeout: float = 60.0
+    embedding_model: str = "openai/text-embedding-3-small"  # for OpenRouter; use "text-embedding-3-small" for direct OpenAI

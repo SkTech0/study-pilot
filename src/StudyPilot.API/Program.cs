@@ -77,6 +77,11 @@ builder.Services.AddRateLimiter(options =>
         o.PermitLimit = isDevelopment ? 60 : 20;
         o.Window = TimeSpan.FromMinutes(1);
     });
+    options.AddFixedWindowLimiter("chat-policy", o =>
+    {
+        o.PermitLimit = isDevelopment ? 100 : 20;
+        o.Window = TimeSpan.FromMinutes(1);
+    });
     options.OnRejected = async (context, _) =>
     {
         context.HttpContext.Response.StatusCode = 429;

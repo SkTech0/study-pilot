@@ -3,9 +3,9 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import Settings
-from app.prompts import get_extract_concepts_prompt, get_generate_quiz_prompt
+from app.prompts import get_chat_prompt, get_extract_concepts_prompt, get_generate_quiz_prompt
 from app.providers.base import LLMProvider
-from app.providers.parse_utils import parse_json_array
+from app.providers.parse_utils import parse_json_array, parse_json_object
 
 
 class OpenAIProvider(LLMProvider):
@@ -45,3 +45,9 @@ class OpenAIProvider(LLMProvider):
         prompt = get_generate_quiz_prompt(names, count)
         content = await self._chat([{"role": "user", "content": prompt}])
         return parse_json_array(content)
+
+    async def chat(self, system: str, question: str, context: list[dict]) -> dict:
+        prompt = get_chat_prompt(system, question, context)
+        content = await self._chat([{"role": "user", "content": prompt}])
+        obj = parse_json_object(content)
+        return {"answer": obj.get("answer", ""), "citedChunkIds": obj.get("citedChunkIds") or []}

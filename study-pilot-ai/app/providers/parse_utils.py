@@ -68,3 +68,29 @@ def parse_json_array(raw: str) -> list[dict]:
             "Could not parse JSON from LLM: %s. Returning empty list.", e
         )
         return []
+
+
+def parse_json_object(raw: str) -> dict:
+    raw = _strip_fences(raw)
+    try:
+        out = json.loads(raw)
+        if isinstance(out, dict):
+            return out
+        if isinstance(out, list) and out and isinstance(out[0], dict):
+            return out[0]
+        return {}
+    except json.JSONDecodeError as e:
+        # Best-effort repair: cut at last closing brace
+        s = raw.strip()
+        last = s.rfind("}")
+        if last != -1:
+            candidate = s[: last + 1]
+            try:
+                out = json.loads(candidate)
+                if isinstance(out, dict):
+                    logger.warning("LLM JSON object was truncated; repaired using last brace.")
+                    return out
+            except json.JSONDecodeError:
+                pass
+        logger.warning("Could not parse JSON object from LLM: %s. Returning empty object.", e)
+        return {}

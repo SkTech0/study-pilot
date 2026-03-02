@@ -25,3 +25,9 @@ class MockProvider(LLMProvider):
             {"text": "Async programming enables?", "options": ["Faster CPU", "Concurrency", "More memory", "Larger files"], "correctAnswer": "Concurrency"},
         ]
         return questions[:n]
+
+    async def chat(self, system: str, question: str, context: list[dict]) -> dict:
+        return {
+            "answer": "This is a mock chat response. Enable a real LLM provider for RAG answers.",
+            "citedChunkIds": [],
+        }

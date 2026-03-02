@@ -24,4 +24,8 @@ public static class ErrorCodes
     public const string QuizNoQuestionsGenerated = "QUIZ_NO_QUESTIONS_GENERATED";
     public const string UserNotFound = "USER_NOT_FOUND";
     public const string RefreshTokenInvalid = "REFRESH_TOKEN_INVALID";
+
+    public const string ChatSessionNotFound = "CHAT_SESSION_NOT_FOUND";
+    public const string ChatSessionAccessDenied = "CHAT_SESSION_ACCESS_DENIED";
+    public const string ChatInvalidPageSize = "CHAT_INVALID_PAGE_SIZE";
 }

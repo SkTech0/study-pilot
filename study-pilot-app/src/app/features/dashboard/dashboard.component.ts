@@ -19,6 +19,7 @@ import { StudyPilotApiService, DocumentItem, WeakTopic } from '@core/services/st
           <div class="flex flex-col gap-2">
             <a routerLink="/documents/upload" class="btn-primary text-center">Upload a PDF</a>
             <a routerLink="/documents" class="btn-secondary text-center">My documents &amp; quizzes</a>
+            <a routerLink="/chat" class="btn-secondary text-center">Chat (RAG)</a>
           </div>
         </div>
         <div class="card">

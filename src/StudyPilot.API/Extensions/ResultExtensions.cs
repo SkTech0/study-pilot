@@ -27,6 +27,8 @@ public static class ResultExtensions
         if (error.Code == ErrorCodes.AuthInvalidCredentials || error.Code == ErrorCodes.AuthInvalidToken ||
             error.Code == ErrorCodes.RefreshTokenInvalid)
             return 401;
+        if (error.Code == ErrorCodes.ChatSessionAccessDenied) return 403;
+        if (error.Code == ErrorCodes.ChatSessionNotFound) return 404;
         if (error.Code == ErrorCodes.RateLimitExceeded) return 429;
         if (error.Code == ErrorCodes.AiServiceUnavailable) return 503;
         return error.Severity switch

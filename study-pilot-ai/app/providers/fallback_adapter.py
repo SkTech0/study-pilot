@@ -70,3 +70,23 @@ class FallbackAdapter(LLMProvider):
         if last_error:
             raise last_error
         raise RuntimeError("No LLM providers available for generate_questions")
+
+    async def chat(self, system: str, question: str, context: list[dict]) -> dict:
+        last_error: Exception | None = None
+        for i, provider in enumerate(self._providers):
+            name = self._names[i] if i < len(self._names) else f"provider_{i}"
+            try:
+                result = await provider.chat(system, question, context)
+                logger.info("LLM chat succeeded with provider=%s", name)
+                return result if isinstance(result, dict) else {}
+            except Exception as e:
+                last_error = _unwrap_error(e)
+                logger.warning(
+                    "LLM chat failed with provider=%s: %s. Failing over to next provider.",
+                    name,
+                    last_error,
+                    exc_info=False,
+                )
+        if last_error:
+            raise last_error
+        raise RuntimeError("No LLM providers available for chat")

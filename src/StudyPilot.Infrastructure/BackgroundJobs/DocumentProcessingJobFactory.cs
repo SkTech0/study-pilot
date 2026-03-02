@@ -35,6 +35,7 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
             using var scope = _services.CreateScope();
             var documentRepo = scope.ServiceProvider.GetRequiredService<IDocumentRepository>();
             var conceptRepo = scope.ServiceProvider.GetRequiredService<IConceptRepository>();
+            var embeddingQueue = scope.ServiceProvider.GetRequiredService<IKnowledgeEmbeddingJobQueue>();
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
             var aiClient = scope.ServiceProvider.GetRequiredService<IStudyPilotAIClient>();
             var fileReader = scope.ServiceProvider.GetRequiredService<IFileContentReader>();
@@ -78,6 +79,17 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
                 document.SetProcessingStatus(ProcessingStatus.Completed);
                 await documentRepo.UpdateAsync(document);
                 await unitOfWork.SaveChangesAsync(ct);
+
+                try
+                {
+                    await embeddingQueue.EnqueueCreateEmbeddingsAsync(documentId, correlationId, ct);
+                    logger.LogInformation("KnowledgeEmbeddingJobEnqueued DocumentId={DocumentId}", documentId);
+                }
+                catch (Exception enqueueEx)
+                {
+                    // Failure isolation: document processing remains completed even if embedding job enqueue fails.
+                    logger.LogWarning(enqueueEx, "KnowledgeEmbeddingJobEnqueueFailed DocumentId={DocumentId}", documentId);
+                }
 
                 sw.Stop();
                 StudyPilotMetrics.DocumentsProcessedTotal.Add(1);

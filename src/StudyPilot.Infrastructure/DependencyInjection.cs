@@ -4,8 +4,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http.Resilience;
+using Pgvector.EntityFrameworkCore;
 using StudyPilot.Application.Abstractions.Auth;
 using StudyPilot.Application.Abstractions.Caching;
+using StudyPilot.Application.Abstractions.Knowledge;
 using StudyPilot.Application.Abstractions.UsageGuard;
 using StudyPilot.Infrastructure.Caching;
 using StudyPilot.Infrastructure.Hosting;
@@ -24,6 +26,7 @@ using StudyPilot.Application.Abstractions.Observability;
 using StudyPilot.Infrastructure.Observability;
 using StudyPilot.Infrastructure.Persistence.Repositories;
 using StudyPilot.Infrastructure.Storage;
+using StudyPilot.Infrastructure.Knowledge;
 
 namespace StudyPilot.Infrastructure;
 
@@ -35,13 +38,17 @@ public static class DependencyInjection
             ?? "Host=localhost;Database=StudyPilot;Username=postgres;Password=postgres";
 
         services.AddDbContext<StudyPilotDbContext>(options =>
-            options.UseNpgsql(connectionString)
+            options.UseNpgsql(connectionString, o => o.UseVector())
                 .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IDocumentRepository, DocumentRepository>();
         services.AddScoped<IConceptRepository, ConceptRepository>();
+        services.AddScoped<IDocumentChunkRepository, PgVectorEmbeddingRepository>();
+        services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
+        services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
+        services.AddScoped<IChatMessageCitationRepository, ChatMessageCitationRepository>();
         services.AddScoped<IQuizRepository, QuizRepository>();
         services.AddScoped<IQuestionConceptLinkRepository, QuestionConceptLinkRepository>();
         services.AddScoped<IUserAnswerRepository, UserAnswerRepository>();
@@ -81,8 +88,31 @@ public static class DependencyInjection
             options.CircuitBreaker.MinimumThroughput = 3;
             options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(10);
         });
+
+        services.AddHttpClient<IStudyPilotKnowledgeAIClient, StudyPilotKnowledgeAIClient>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AIServiceOptions>>().Value;
+            client.BaseAddress = new Uri(opts.BaseUrl.TrimEnd('/') + "/");
+            var timeoutSeconds = opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 60;
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(timeoutSeconds, 120));
+        })
+        .AddHttpMessageHandler<AiConcurrencyHandler>()
+        .AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(120);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
+            options.CircuitBreaker.ShouldHandle = _ => new ValueTask<bool>(false);
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(240);
+            options.CircuitBreaker.FailureRatio = 0.5;
+            options.CircuitBreaker.MinimumThroughput = 3;
+            options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(10);
+        });
         services.AddScoped<IAIService, StudyPilotAIServiceAdapter>();
         services.AddScoped<IQuestionGenerationDispatcher, QuestionGenerationDispatcher>();
+
+        services.AddScoped<IEmbeddingService, EmbeddingService>();
+        services.AddScoped<IVectorSearchService, PgVectorSearchService>();
+        services.AddScoped<IChatService, ChatService>();
 
         services.AddSingleton<ICorrelationIdAccessor, CorrelationIdAccessor>();
         services.Configure<StorageOptions>(config.GetSection(StorageOptions.SectionName));
@@ -90,11 +120,16 @@ public static class DependencyInjection
 
         services.Configure<BackgroundJobOptions>(config.GetSection(BackgroundJobOptions.SectionName));
         services.AddScoped<IBackgroundJobRepository, BackgroundJobRepository>();
+        services.AddScoped<IKnowledgeEmbeddingJobRepository, KnowledgeEmbeddingJobRepository>();
         services.AddSingleton<DbBackedBackgroundJobQueue>();
         services.AddSingleton<IBackgroundJobQueue>(sp => sp.GetRequiredService<DbBackedBackgroundJobQueue>());
         services.AddSingleton<IBackgroundQueueMetrics>(sp => sp.GetRequiredService<DbBackedBackgroundJobQueue>());
         services.AddSingleton<IDocumentProcessingJobFactory, DocumentProcessingJobFactory>();
         services.AddHostedService<BackgroundJobWorker>();
+        services.AddSingleton<DbBackedKnowledgeEmbeddingJobQueue>();
+        services.AddSingleton<IKnowledgeEmbeddingJobQueue>(sp => sp.GetRequiredService<DbBackedKnowledgeEmbeddingJobQueue>());
+        services.AddSingleton<IKnowledgeEmbeddingJobFactory, KnowledgeEmbeddingJobFactory>();
+        services.AddHostedService<KnowledgeEmbeddingJobWorker>();
         services.AddHostedService<DatabaseMigrationHostedService>();
         services.AddHostedService<DatabaseStartupCheck>();
         services.AddHostedService<AIStartupCheck>();

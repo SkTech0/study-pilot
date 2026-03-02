@@ -30,16 +30,25 @@ docker compose up --build
 
 ## Option B: Run everything on the host (no Docker)
 
-### Quick start (Windows PowerShell)
+### Quick start
 
-From the repo root, run:
+**macOS / Linux** (from repo root):
+
+```bash
+./scripts/run-local.sh
+```
+
+This starts the AI service (port 8000), .NET API (port 5024), and frontend (port 4200) in the background. Press **Ctrl+C** to stop all services.
+
+**Windows PowerShell** (from repo root):
 
 ```powershell
 .\scripts\run-local.ps1
 ```
 
-This opens three windows: AI service (port 8000), .NET API (port 5024), and frontend (port 4200).  
-**Before that**, ensure PostgreSQL is running and the database exists (see below).
+This opens three windows: AI service (port 8000), .NET API (port 5024), and frontend (port 4200).
+
+**Before running**, ensure PostgreSQL is running and the database exists (see below).
 
 ### 1. PostgreSQL
 SELECT pg_terminate_backend(pid)
@@ -54,7 +63,7 @@ Install and start PostgreSQL, then create the DB and user. **PostgreSQL 15+** no
 CREATE DATABASE "StudyPilot";
 CREATE USER studypilot WITH PASSWORD 'postgres';
 GRANT ALL PRIVILEGES ON DATABASE "StudyPilot" TO studypilot;
-
+CREATE EXTENSION IF NOT EXISTS vector;
 -- Required on PostgreSQL 15+: allow app user to run migrations (create tables in public)
 \c "StudyPilot"
 GRANT USAGE ON SCHEMA public TO studypilot;
@@ -71,8 +80,9 @@ Run the first block as a superuser (e.g. `psql -U postgres`). The `\c "StudyPilo
 
 - First-time setup (create DB + user + grants):  
   `psql -U postgres -f scripts/postgres-setup.sql`
-- Database and user already exist (grants only):  
-  `psql -U postgres -d StudyPilot -f scripts/postgres-grant-public.sql`
+- Database and user already exist (grants + pgvector extension):  
+  `psql -U postgres -d StudyPilot -f scripts/postgres-grant-public.sql`  
+  This script creates the `vector` extension (required for AI knowledge retrieval) and grants on `public`. Must be run as superuser (`postgres`).
 
 Connection is set in `appsettings.Development.json`: `Host=localhost;Database=StudyPilot;Username=studypilot;Password=postgres`.
 
@@ -85,12 +95,25 @@ The Python service uses a **provider adapter**: it tries providers in the order 
 
 At startup the service logs which chain is active, e.g. `LLM provider chain (adapter): gemini` or `LLM provider chain (adapter): openai, gemini`.
 
+**First-time setup (use a virtual environment — required on macOS with Homebrew Python):**
+
 ```bash
 cd study-pilot-ai
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
-# Ensure .env exists (copy from .env.example) and set GEMINI_API_KEY=your-key
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+**Run the AI service:**
+
+```bash
+cd study-pilot-ai
+source .venv/bin/activate   # if not already activated
+# Ensure .env exists (copy from .env.example) and set GEMINI_API_KEY=your-key
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Or in one line (no activate): `./.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
 
 Or use the `run-local.ps1` script to start it in a separate window.
 

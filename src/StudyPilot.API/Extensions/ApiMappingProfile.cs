@@ -4,6 +4,9 @@ using StudyPilot.API.Contracts.Responses;
 using StudyPilot.Application.Auth;
 using StudyPilot.Application.Auth.Login;
 using StudyPilot.Application.Auth.Register;
+using StudyPilot.Application.Chat.CreateChatSession;
+using StudyPilot.Application.Chat.GetChatHistory;
+using StudyPilot.Application.Chat.SendChatMessage;
 using StudyPilot.Application.Common.Models;
 using StudyPilot.Application.Documents.GetDocuments;
 using StudyPilot.Application.Documents.UploadDocument;
@@ -40,5 +43,10 @@ public sealed class ApiMappingProfile : Profile
         CreateMap<WeakConceptItem, WeakTopicResponse>();
         CreateMap<RefreshTokenRequest, RefreshTokenCommand>();
         CreateMap<RefreshTokenRequest, LogoutCommand>();
+        CreateMap<CreateChatSessionResult, CreateChatSessionResponse>();
+        CreateMap<SendChatMessageResult, SendChatMessageResponse>();
+        CreateMap<GetChatHistoryResult, GetChatHistoryResponse>();
+        CreateMap<ChatMessageItem, ChatMessageItemResponse>()
+            .ForMember(d => d.Role, o => o.MapFrom(s => s.Role.ToString()));
     }
 }

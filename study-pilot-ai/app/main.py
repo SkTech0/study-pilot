@@ -53,6 +53,7 @@ async def lifespan(app: FastAPI):
     provider = get_provider(settings)
     app.state.concept_service = ConceptService(provider)
     app.state.quiz_service = QuizService(provider)
+    app.state.llm_provider = provider
     yield
 
 

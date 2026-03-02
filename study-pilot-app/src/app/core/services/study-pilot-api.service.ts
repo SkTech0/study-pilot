@@ -131,4 +131,41 @@ export class StudyPilotApiService {
   getAIHealth(): Observable<AIHealthResponse> {
     return this.http.get<AIHealthResponse>(this.url('health/ai'));
   }
+
+  createChatSession(documentId?: string | null): Observable<{ sessionId: string }> {
+    return this.http.post<{ sessionId: string }>(this.url('chat/sessions'), { documentId: documentId ?? null });
+  }
+
+  sendChatMessage(sessionId: string, content: string): Observable<SendChatMessageResult> {
+    return this.http.post<SendChatMessageResult>(this.url('chat/message'), { sessionId, content });
+  }
+
+  getChatHistory(sessionId: string, pageNumber = 1, pageSize = 50): Observable<GetChatHistoryResponse> {
+    return this.http.get<GetChatHistoryResponse>(
+      this.url(`chat/history/${sessionId}`),
+      { params: { pageNumber, pageSize } }
+    );
+  }
+}
+
+export interface SendChatMessageResult {
+  assistantMessageId: string;
+  answer: string;
+  citedChunkIds: string[];
+}
+
+export interface ChatMessageItem {
+  messageId: string;
+  role: string;
+  content: string;
+  createdAtUtc: string;
+  citedChunkIds: string[];
+}
+
+export interface GetChatHistoryResponse {
+  sessionId: string;
+  totalCount: number;
+  pageNumber: number;
+  pageSize: number;
+  messages: ChatMessageItem[];
 }

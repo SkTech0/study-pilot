@@ -37,3 +37,36 @@ class QuizQuestionOut(BaseModel):
 class GenerateQuizResponse(BaseModel):
     model_config = ConfigDict(serialize_by_alias=True)
     questions: list[QuizQuestionOut]
+
+
+class EmbeddingsRequest(BaseModel):
+    texts: list[str] = Field(default_factory=list, min_length=1, max_length=256)
+
+
+class EmbeddingsResponse(BaseModel):
+    embeddings: list[list[float]]
+    model: str | None = None
+
+
+class ChatContextChunkIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    chunk_id: str = Field(..., alias="chunkId")
+    document_id: str = Field(..., alias="documentId")
+    text: str
+
+
+class ChatRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    session_id: str = Field(..., alias="sessionId")
+    user_id: str = Field(..., alias="userId")
+    document_id: str | None = Field(None, alias="documentId")
+    system: str
+    question: str
+    context: list[ChatContextChunkIn] = Field(default_factory=list)
+
+
+class ChatResponse(BaseModel):
+    model_config = ConfigDict(serialize_by_alias=True)
+    answer: str
+    cited_chunk_ids: list[str] = Field(default_factory=list, alias="citedChunkIds")
+    model: str | None = None
