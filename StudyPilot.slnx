@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/StudyPilot.API/StudyPilot.API.csproj" />
+    <Project Path="src/StudyPilot.Application/StudyPilot.Application.csproj" />
+    <Project Path="src/StudyPilot.Domain/StudyPilot.Domain.csproj" />
+    <Project Path="src/StudyPilot.Infrastructure/StudyPilot.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/StudyPilot.Application.Tests/StudyPilot.Application.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,70 @@
+services:
+  frontend:
+    build:
+      context: ../study-pilot-app
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - studypilot
+
+  api:
+    build:
+      context: ..
+      dockerfile: src/StudyPilot.API/Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: ${ConnectionStrings__Default}
+      Jwt__Secret: ${Jwt__Secret}
+      Jwt__Issuer: ${Jwt__Issuer}
+      Jwt__Audience: ${Jwt__Audience}
+      Jwt__AccessTokenMinutes: ${Jwt__AccessTokenMinutes:-15}
+      Jwt__RefreshTokenDays: ${Jwt__RefreshTokenDays:-7}
+      AIService__BaseUrl: http://ai-service:8000
+      AIService__TimeoutSeconds: ${AIService__TimeoutSeconds:-60}
+      AIService__MaxTextLength: ${AIService__MaxTextLength:-50000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+    networks:
+      - studypilot
+
+  ai-service:
+    build:
+      context: ../study-pilot-ai
+      dockerfile: Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    networks:
+      - studypilot
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-studypilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-studypilot}
+      POSTGRES_DB: ${POSTGRES_DB:-StudyPilot}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-studypilot} -d ${POSTGRES_DB:-StudyPilot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - studypilot
+
+volumes:
+  postgres_data:
+
+networks:
+  studypilot:
+    driver: bridge

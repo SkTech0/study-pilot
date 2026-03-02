@@ -1,0 +1,61 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets and env (never commit)
+.env
+.env.*
+!.env.example
+deploy/.env
+deploy/.env.local
+!deploy/.env.example
+# .NET
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+project.lock.json
+project.fragment.lock.json
+artifacts/
+**/packages/
+
+# Angular / Node
+node_modules/
+dist/
+.angular/
+/tmp
+/out-tsc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.parcel-cache/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+
+# IDE
+.idea/
+*.sublime-workspace
+.history/
+.cursor/
+# Uploads (runtime data)
+uploads/
+
+# Build / deploy
+*.log
+*.tmp

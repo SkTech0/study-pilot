@@ -1,0 +1,1 @@
+namespace StudyPilot.Application;
