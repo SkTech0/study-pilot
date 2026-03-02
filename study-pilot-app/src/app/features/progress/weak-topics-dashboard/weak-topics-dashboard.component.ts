@@ -6,27 +6,43 @@ import { StudyPilotApiService, WeakTopic } from '@core/services/study-pilot-api.
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="p-4">
-      <h1 class="text-xl font-semibold mb-4">Weak topics</h1>
+    <div class="p-4 sm:p-6 max-w-4xl mx-auto">
+      <div class="mb-6">
+        <h1 class="text-2xl font-semibold text-gray-900">Progress &amp; weak topics</h1>
+        <p class="mt-1 text-sm text-gray-500">Topics to review based on your quiz performance</p>
+      </div>
       @if (loading()) {
-        <p class="text-gray-600">Loading...</p>
-      } @else {
-        <ul class="space-y-3">
-          @for (t of topics(); track t.conceptId) {
-            <li class="border rounded p-3 flex justify-between items-center">
-              <span class="font-medium">{{ t.conceptName }}</span>
-              <div class="flex items-center gap-2">
-                <div class="w-24 h-2 bg-gray-200 rounded overflow-hidden">
-                  <div class="h-full bg-blue-600 rounded" [style.width.%]="t.masteryScore"></div>
-                </div>
-                <span class="text-sm text-gray-600">{{ t.masteryScore }}%</span>
-              </div>
-            </li>
+        <div class="card space-y-4">
+          @for (i of [1,2,3,4,5]; track i) {
+            <div class="animate-pulse flex items-center gap-4">
+              <span class="h-4 bg-gray-200 rounded flex-1 max-w-[200px]"></span>
+              <span class="h-2 bg-gray-100 rounded w-24"></span>
+              <span class="h-4 bg-gray-100 rounded w-10"></span>
+            </div>
           }
-        </ul>
-        @if (topics().length === 0) {
-          <p class="text-gray-500">No weak topics yet. Complete quizzes to see your progress.</p>
-        }
+        </div>
+      } @else {
+        <div class="card">
+          <ul class="space-y-4">
+            @for (t of topics(); track t.conceptId) {
+              <li class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <span class="font-medium text-gray-900">{{ t.conceptName }}</span>
+                <div class="flex items-center gap-3">
+                  <div class="w-24 sm:w-32 h-2.5 bg-gray-200 rounded-full overflow-hidden" role="progressbar" [attr.aria-valuenow]="t.masteryScore" aria-valuemin="0" aria-valuemax="100">
+                    <div class="h-full bg-blue-600 rounded-full transition-all" [style.width.%]="t.masteryScore"></div>
+                  </div>
+                  <span class="text-sm font-medium text-gray-600 w-10">{{ t.masteryScore }}%</span>
+                </div>
+              </li>
+            }
+          </ul>
+          @if (topics().length === 0) {
+            <div class="text-center py-10 text-gray-500">
+              <p>No weak topics yet.</p>
+              <p class="mt-1 text-sm">Complete quizzes to see your progress here.</p>
+            </div>
+          }
+        </div>
       }
     </div>
   `

@@ -8,48 +8,79 @@ import { StudyPilotApiService, DocumentItem, WeakTopic } from '@core/services/st
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink],
   template: `
-    <div class="p-4 max-w-4xl mx-auto">
-      <h1 class="text-2xl font-semibold mb-6">Dashboard</h1>
+    <div class="p-4 sm:p-6 max-w-4xl mx-auto">
+      <div class="mb-8">
+        <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900">Dashboard</h1>
+        <p class="mt-1 text-gray-500">Overview of your study materials and progress</p>
+      </div>
       <div class="grid gap-6 md:grid-cols-2">
-        <div class="rounded border p-4 bg-white shadow">
-          <h2 class="font-medium mb-2">Quick actions</h2>
-          <a routerLink="/documents/upload" class="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mb-2">Upload document</a>
-          <a routerLink="/documents" class="block text-blue-600 hover:underline">Documents (upload &amp; start quiz)</a>
+        <div class="card">
+          <h2 class="text-lg font-medium text-gray-900 mb-3">Quick actions</h2>
+          <div class="flex flex-col gap-2">
+            <a routerLink="/documents/upload" class="btn-primary text-center">Upload document</a>
+            <a routerLink="/documents" class="btn-secondary text-center">View documents &amp; start quiz</a>
+          </div>
         </div>
-        <div class="rounded border p-4 bg-white shadow">
-          <h2 class="font-medium mb-2">AI health</h2>
-          <span class="px-2 py-1 rounded text-sm" [class]="aiHealthClass()">{{ aiHealth() }}</span>
+        <div class="card">
+          <h2 class="text-lg font-medium text-gray-900 mb-2">AI health</h2>
+          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium" [class]="aiHealthClass()">{{ aiHealth() }}</span>
         </div>
       </div>
-      <div class="mt-6 rounded border p-4 bg-white shadow">
-        <h2 class="font-medium mb-2">Recent documents</h2>
-        <ul class="divide-y">
-          @for (doc of recentDocs(); track doc.id) {
-            <li class="py-2 flex justify-between">
-              <span>{{ doc.fileName }}</span>
-              <span class="text-sm text-gray-500">{{ doc.status }}</span>
-            </li>
+      <div class="mt-6 card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-medium text-gray-900">Recent documents</h2>
+          <a routerLink="/documents" class="text-sm font-medium text-blue-600 hover:text-blue-700">View all</a>
+        </div>
+        @if (loadingDocs()) {
+          <ul class="divide-y divide-gray-200">
+            @for (i of [1,2,3]; track i) {
+              <li class="py-3 animate-pulse"><span class="block h-4 bg-gray-200 rounded w-3/4"></span><span class="block h-3 bg-gray-100 rounded w-16 mt-1"></span></li>
+            }
+          </ul>
+        } @else {
+          <ul class="divide-y divide-gray-200">
+            @for (doc of recentDocs(); track doc.id) {
+              <li class="py-3 flex justify-between items-center gap-2">
+                <span class="text-gray-900 truncate">{{ doc.fileName }}</span>
+                <span class="shrink-0 px-2 py-0.5 rounded text-xs font-medium"
+                      [class.bg-yellow-100]="doc.status === 'Pending' || doc.status === 'Processing'"
+                      [class.text-yellow-800]="doc.status === 'Pending' || doc.status === 'Processing'"
+                      [class.bg-green-100]="doc.status === 'Completed'"
+                      [class.text-green-800]="doc.status === 'Completed'"
+                      [class.bg-red-100]="doc.status === 'Failed'"
+                      [class.text-red-800]="doc.status === 'Failed'">{{ doc.status }}</span>
+              </li>
+            }
+          </ul>
+          @if (recentDocs().length === 0) {
+            <p class="text-gray-500 text-sm py-2">No documents yet. Upload a PDF to get started.</p>
           }
-        </ul>
-        @if (recentDocs().length === 0 && !loadingDocs()) {
-          <p class="text-gray-500 text-sm">No documents yet.</p>
         }
-        <a routerLink="/documents" class="text-blue-600 text-sm hover:underline mt-2 inline-block">View all</a>
       </div>
-      <div class="mt-6 rounded border p-4 bg-white shadow">
-        <h2 class="font-medium mb-2">Weak topics</h2>
-        <ul class="divide-y">
-          @for (t of weakTopics(); track t.conceptId) {
-            <li class="py-2 flex justify-between">
-              <span>{{ t.conceptName }}</span>
-              <span class="text-sm">{{ t.masteryScore }}%</span>
-            </li>
+      <div class="mt-6 card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-medium text-gray-900">Weak topics</h2>
+          <a routerLink="/progress" class="text-sm font-medium text-blue-600 hover:text-blue-700">View all</a>
+        </div>
+        @if (loadingWeak()) {
+          <ul class="space-y-2">
+            @for (i of [1,2,3]; track i) {
+              <li class="animate-pulse h-10 bg-gray-100 rounded"></li>
+            }
+          </ul>
+        } @else {
+          <ul class="divide-y divide-gray-200">
+            @for (t of weakTopics(); track t.conceptId) {
+              <li class="py-3 flex justify-between items-center gap-2">
+                <span class="text-gray-900">{{ t.conceptName }}</span>
+                <span class="text-sm font-medium text-gray-600">{{ t.masteryScore }}%</span>
+              </li>
+            }
+          </ul>
+          @if (weakTopics().length === 0) {
+            <p class="text-gray-500 text-sm py-2">No weak topics yet. Complete quizzes to see your progress.</p>
           }
-        </ul>
-        @if (weakTopics().length === 0 && !loadingWeak()) {
-          <p class="text-gray-500 text-sm">No weak topics yet.</p>
         }
-        <a routerLink="/progress" class="text-blue-600 text-sm hover:underline mt-2 inline-block">View all</a>
       </div>
     </div>
   `
