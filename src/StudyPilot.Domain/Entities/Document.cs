@@ -9,6 +9,8 @@ public class Document : BaseEntity
     public string FileName { get; private set; }
     public string StoragePath { get; private set; }
     public ProcessingStatus ProcessingStatus { get; private set; }
+    /// <summary>When status is Failed, optional reason for the failure (e.g. from exception message).</summary>
+    public string? FailureReason { get; private set; }
 
     private readonly List<Concept> _concepts = new();
     public IReadOnlyCollection<Concept> Concepts => _concepts.AsReadOnly();
@@ -25,12 +27,13 @@ public class Document : BaseEntity
         ProcessingStatus = Enums.ProcessingStatus.Pending;
     }
 
-    public Document(Guid id, Guid userId, string fileName, string storagePath, ProcessingStatus processingStatus, DateTime createdAtUtc, DateTime updatedAtUtc) : base(id, createdAtUtc, updatedAtUtc)
+    public Document(Guid id, Guid userId, string fileName, string storagePath, ProcessingStatus processingStatus, DateTime createdAtUtc, DateTime updatedAtUtc, string? failureReason = null) : base(id, createdAtUtc, updatedAtUtc)
     {
         UserId = userId;
         FileName = fileName;
         StoragePath = storagePath;
         ProcessingStatus = processingStatus;
+        FailureReason = failureReason;
     }
 
     public void AddConcept(Concept concept)
@@ -43,9 +46,10 @@ public class Document : BaseEntity
         Touch();
     }
 
-    public void SetProcessingStatus(ProcessingStatus status)
+    public void SetProcessingStatus(ProcessingStatus status, string? failureReason = null)
     {
         ProcessingStatus = status;
+        FailureReason = failureReason;
         Touch();
     }
 }

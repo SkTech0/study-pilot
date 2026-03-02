@@ -33,22 +33,29 @@ import { DocumentPollingService } from '@core/services/document-polling.service'
         <div class="card">
           <ul class="divide-y divide-gray-200">
             @for (doc of documents(); track doc.id) {
-              <li class="py-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                <span class="font-medium text-gray-900 truncate">{{ doc.fileName }}</span>
-                <div class="flex items-center gap-2 flex-wrap">
-                  @if (doc.status === 'Completed') {
-                    <a [routerLink]="['/quiz', doc.id]" class="btn-primary text-sm">Start quiz</a>
-                  }
-                  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
-                        [class.bg-yellow-100]="doc.status === 'Pending' || doc.status === 'Processing'"
-                        [class.text-yellow-800]="doc.status === 'Pending' || doc.status === 'Processing'"
-                        [class.bg-green-100]="doc.status === 'Completed'"
-                        [class.text-green-800]="doc.status === 'Completed'"
-                        [class.bg-red-100]="doc.status === 'Failed'"
-                        [class.text-red-800]="doc.status === 'Failed'">
-                    {{ doc.status }}
-                  </span>
+              <li class="py-4 flex flex-col gap-2">
+                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                  <span class="font-medium text-gray-900 truncate">{{ doc.fileName }}</span>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    @if (doc.status === 'Completed') {
+                      <a [routerLink]="['/quiz', doc.id]" class="btn-primary text-sm">Start quiz</a>
+                    }
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
+                          [class.bg-yellow-100]="doc.status === 'Pending' || doc.status === 'Processing'"
+                          [class.text-yellow-800]="doc.status === 'Pending' || doc.status === 'Processing'"
+                          [class.bg-green-100]="doc.status === 'Completed'"
+                          [class.text-green-800]="doc.status === 'Completed'"
+                          [class.bg-red-100]="doc.status === 'Failed'"
+                          [class.text-red-800]="doc.status === 'Failed'">
+                      {{ doc.status }}
+                    </span>
+                  </div>
                 </div>
+                @if (doc.status === 'Failed' && doc.failureReason) {
+                  <p class="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2" role="alert">
+                    {{ doc.failureReason }}
+                  </p>
+                }
               </li>
             }
           </ul>

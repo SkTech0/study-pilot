@@ -60,13 +60,15 @@ public static class DependencyInjection
             var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AIServiceOptions>>().Value;
             client.BaseAddress = new Uri(opts.BaseUrl.TrimEnd('/') + "/");
             var timeoutSeconds = opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 60;
-            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(timeoutSeconds, 120)); // at least 120s for quiz/start
         }).AddStandardResilienceHandler(options =>
         {
-            // Circuit breaker makes local/dev flows flaky with free-tier LLM rate limits (429),
-            // because a brief outage can block subsequent calls for an extended period.
+            // Default AttemptTimeout is 30s; quiz generation can take 60–120s. Use 120s so AI has time to respond.
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(120);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
             options.CircuitBreaker.ShouldHandle = _ => new ValueTask<bool>(false);
-            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+            // Sampling duration must be at least 2× AttemptTimeout for validation (120s × 2 = 240s).
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(240);
             options.CircuitBreaker.FailureRatio = 0.5;
             options.CircuitBreaker.MinimumThroughput = 3;
             options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(10);

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using StudyPilot.Application.Abstractions.Persistence;
 using StudyPilot.Application.Common.Errors;
 using StudyPilot.Application.Common.Models;
@@ -5,6 +6,36 @@ using MediatR;
 using StudyPilot.Domain.Entities;
 
 namespace StudyPilot.Application.Quiz.SubmitQuiz;
+
+internal static class QuizGrading
+{
+    /// <summary>Resolve stored correct answer (option text, or letter A–D, or 1–4) to the exact option text for comparison.</summary>
+    public static string ResolveCorrectAnswerText(string correctAnswer, IReadOnlyList<string> options)
+    {
+        if (options.Count == 0) return correctAnswer?.Trim() ?? "";
+        var raw = (correctAnswer ?? "").Trim();
+        if (raw.Length == 1 && raw[0] is >= 'A' and <= 'D')
+        {
+            var idx = raw[0] - 'A';
+            if (idx < options.Count) return options[idx].Trim();
+        }
+        if (raw.Length == 1 && char.IsDigit(raw[0]))
+        {
+            var i = raw[0] - '0';
+            if (i >= 1 && i <= options.Count) return options[i - 1].Trim();
+            if (i < options.Count) return options[i].Trim();
+        }
+        return raw;
+    }
+
+    public static bool IsCorrect(string resolvedCorrect, string submittedAnswer)
+    {
+        var a = (resolvedCorrect ?? "").Trim();
+        var b = (submittedAnswer ?? "").Trim();
+        if (a.Length == 0 && b.Length == 0) return true;
+        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    }
+}
 
 public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand, Result<SubmitQuizResult>>
 {
@@ -42,7 +73,8 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
             if (!answerMap.TryGetValue(question.Id, out var submittedAnswer))
                 continue;
 
-            var isCorrect = string.Equals(question.CorrectAnswer.Trim(), submittedAnswer.Trim(), StringComparison.OrdinalIgnoreCase);
+            var correctText = QuizGrading.ResolveCorrectAnswerText(question.CorrectAnswer, question.Options.ToList());
+            var isCorrect = QuizGrading.IsCorrect(correctText, submittedAnswer);
             if (isCorrect) correctCount++;
 
             var userAnswer = new UserAnswer(request.UserId, question.Id, submittedAnswer, isCorrect);
@@ -52,6 +84,7 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
             if (conceptId is null) continue;
 
             var progress = await _progressRepository.GetByUserAndConceptAsync(request.UserId, conceptId.Value, cancellationToken);
+            var isNew = progress is null;
             if (progress is null)
             {
                 progress = new UserConceptProgress(request.UserId, conceptId.Value);
@@ -62,7 +95,9 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
                 progress.RecordCorrectAnswer();
             else
                 progress.RecordWrongAnswer();
-            await _progressRepository.UpdateAsync(progress, cancellationToken);
+
+            if (!isNew)
+                await _progressRepository.UpdateAsync(progress, cancellationToken);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

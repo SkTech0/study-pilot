@@ -15,9 +15,18 @@ namespace StudyPilot.Infrastructure.BackgroundJobs;
 
 public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
 {
+    private const int MaxFailureReasonLength = 500;
     private readonly IServiceProvider _services;
 
     public DocumentProcessingJobFactory(IServiceProvider services) => _services = services;
+
+    private static string SanitizeFailureReason(string message, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return "An error occurred during processing.";
+        var sanitized = message.Trim();
+        if (sanitized.Length > maxLength) sanitized = sanitized[..maxLength];
+        return sanitized;
+    }
 
     public Func<CancellationToken, Task> CreateProcessDocumentJob(Guid documentId, string? correlationId = null)
     {
@@ -84,7 +93,7 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
                 logger.LogWarning("DocumentProcessingCancelled DocumentId={DocumentId} ElapsedMilliseconds={ElapsedMilliseconds}", documentId, sw.ElapsedMilliseconds);
                 try
                 {
-                    document.SetProcessingStatus(ProcessingStatus.Failed);
+                    document.SetProcessingStatus(ProcessingStatus.Failed, "Processing was cancelled.");
                     await documentRepo.UpdateAsync(document);
                     await unitOfWork.SaveChangesAsync(CancellationToken.None);
                 }
@@ -97,7 +106,8 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
                     documentId, sw.ElapsedMilliseconds);
                 try
                 {
-                    document.SetProcessingStatus(ProcessingStatus.Failed);
+                    var reason = SanitizeFailureReason(ex.Message, MaxFailureReasonLength);
+                    document.SetProcessingStatus(ProcessingStatus.Failed, reason);
                     await documentRepo.UpdateAsync(document);
                     await unitOfWork.SaveChangesAsync(CancellationToken.None);
                 }

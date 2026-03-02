@@ -5,7 +5,9 @@ import { EnterpriseApiError } from './enterprise-api-error';
 import type { AppError } from '../models/app-error.model';
 
 function isApiResponse(body: unknown): body is ApiResponse<unknown> {
-  return typeof body === 'object' && body !== null && 'success' in body;
+  if (body === null || typeof body !== 'object') return false;
+  const o = body as Record<string, unknown>;
+  return 'success' in o || 'Success' in o;
 }
 
 function toEnterpriseError(err: HttpErrorResponse): unknown {
@@ -22,12 +24,15 @@ export const apiResponseInterceptor: HttpInterceptorFn = (req, next) => {
   return next(req).pipe(
     map(event => {
       if (event instanceof HttpResponse && event.body && isApiResponse(event.body)) {
-        const body = event.body as ApiResponse<unknown>;
-        if (!body.success) {
-          const errors = Array.isArray(body.errors) ? body.errors : [];
-          throw new EnterpriseApiError(errors, body.correlationId);
+        const body = event.body as unknown as Record<string, unknown>;
+        const success = body['success'] ?? body['Success'];
+        if (success !== true) {
+          const errors = Array.isArray(body['errors']) ? (body['errors'] as AppError[]) : [];
+          const correlationId = (body['correlationId'] ?? body['CorrelationId']) as string | undefined;
+          throw new EnterpriseApiError(errors, correlationId);
         }
-        return event.clone({ body: body.data });
+        const data = body['data'] ?? body['Data'];
+        return event.clone({ body: data });
       }
       return event;
     }),

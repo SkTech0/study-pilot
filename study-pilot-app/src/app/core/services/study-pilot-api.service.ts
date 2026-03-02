@@ -25,6 +25,8 @@ export interface DocumentItem {
   fileName: string;
   status: string;
   createdAt: string;
+  /** When status is Failed, optional reason from the server. */
+  failureReason?: string | null;
 }
 
 export interface QuizSession {
