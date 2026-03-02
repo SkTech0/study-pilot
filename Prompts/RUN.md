@@ -43,19 +43,42 @@ This opens three windows: AI service (port 8000), .NET API (port 5024), and fron
 
 ### 1. PostgreSQL
 
-Install and start PostgreSQL, then create the DB and user:
+Install and start PostgreSQL, then create the DB and user. **PostgreSQL 15+** no longer grants create on `public` by default, so grant schema permissions too:
 
 ```sql
 CREATE DATABASE "StudyPilot";
 CREATE USER studypilot WITH PASSWORD 'postgres';
 GRANT ALL PRIVILEGES ON DATABASE "StudyPilot" TO studypilot;
+
+-- Required on PostgreSQL 15+: allow app user to run migrations (create tables in public)
+\c "StudyPilot"
+GRANT USAGE ON SCHEMA public TO studypilot;
+GRANT CREATE ON SCHEMA public TO studypilot;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO studypilot;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO studypilot;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO studypilot;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO studypilot;
 ```
+
+Run the first block as a superuser (e.g. `psql -U postgres`). The `\c "StudyPilot"` connects to the database; then run the rest.
+
+**Or use the repo scripts (from repo root):**
+
+- First-time setup (create DB + user + grants):  
+  `psql -U postgres -f scripts/postgres-setup.sql`
+- Database and user already exist (grants only):  
+  `psql -U postgres -d StudyPilot -f scripts/postgres-grant-public.sql`
 
 Connection is set in `appsettings.Development.json`: `Host=localhost;Database=StudyPilot;Username=studypilot;Password=postgres`.
 
 ### 2. AI service (Python)
 
-Uses **Gemini** by default if `GEMINI_API_KEY` is set in `study-pilot-ai/.env`; otherwise set `OPENAI_API_KEY` and `LLM_PROVIDER=openai`.
+The Python service uses a **provider adapter**: it tries providers in the order of `LLM_FALLBACK_CHAIN`; only providers that have an API key are used. If you set only `GEMINI_API_KEY`, you get Gemini only. To use multiple providers (or a different primary), set the keys and chain in `study-pilot-ai/.env`:
+
+- **Chain (order = primary → fallback):** `LLM_FALLBACK_CHAIN=gemini,deepseek,openrouter` or e.g. `openai,gemini`. Only providers with a key are active.
+- **Keys:** Set one or more of `GEMINI_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY` (see `study-pilot-ai/.env.example`).
+
+At startup the service logs which chain is active, e.g. `LLM provider chain (adapter): gemini` or `LLM provider chain (adapter): openai, gemini`.
 
 ```bash
 cd study-pilot-ai
@@ -89,6 +112,17 @@ Runs at http://localhost:4200 and proxies `/api` to http://localhost:5024.
 ---
 
 ## Troubleshooting
+
+### Document stays "Processing" or everything feels slow
+
+- **Document status "Processing"**  
+  After upload, a background job calls the **Python AI service** (port 8000) to extract concepts. The document stays "Processing" until that finishes.  
+  - Ensure the **AI service is running**: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000` in `study-pilot-ai`.  
+  - First run can take **30 seconds–2 minutes** depending on document size and API (e.g. Gemini).  
+  - If the AI service is down or slow, the job will eventually fail and the document will show "Failed" with a reason.
+
+- **Quiz first question takes a long time**  
+  Questions are now generated **on demand** (lazy). The first time you open a question, the backend calls the AI to generate it, so the first load can take **5–30+ seconds**. Later questions may load faster if prefetched. This is expected. In Development, retry delays between failed attempts are shorter (see `AIService:QuestionGenerationRetryBaseDelayMs` in `appsettings.Development.json`).
 
 ### `ECONNREFUSED` on `/documents`, `/health/ai`, `/progress/weak-topics`
 

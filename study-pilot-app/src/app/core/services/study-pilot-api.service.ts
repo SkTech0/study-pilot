@@ -31,7 +31,8 @@ export interface DocumentItem {
 
 export interface QuizSession {
   quizId: string;
-  questions: QuizQuestion[];
+  totalQuestionCount: number;
+  questions: (QuizQuestion | null)[];
 }
 
 export interface QuizQuestion {
@@ -41,14 +42,30 @@ export interface QuizQuestion {
   conceptId?: string;
 }
 
+/** Response from get-question-by-index; status indicates Ready, Generating, or Failed. */
+export interface GetQuizQuestionResponse {
+  id: string;
+  text?: string | null;
+  options?: string[] | null;
+  status: 'Ready' | 'Generating' | 'Failed';
+  errorMessage?: string | null;
+}
+
 export interface SubmitQuizRequest {
   quizId: string;
-  answers: { questionId: string; submittedAnswer: string }[];
+  answers: { questionId: string; submittedAnswer?: string; submittedOptionIndex?: number }[];
 }
 
 export interface QuizResult {
   correctCount: number;
   totalCount: number;
+  /** Per-question correct/incorrect and correct answer (name + 0-based option index). */
+  questionResults?: {
+    questionId: string;
+    isCorrect: boolean;
+    correctAnswer: string;
+    correctOptionIndex: number;
+  }[];
 }
 
 export interface WeakTopic {
@@ -97,6 +114,10 @@ export class StudyPilotApiService {
 
   startQuiz(documentId: string): Observable<QuizSession> {
     return this.http.post<QuizSession>(this.url('quiz/start'), { documentId });
+  }
+
+  getQuizQuestion(quizId: string, questionIndex: number): Observable<GetQuizQuestionResponse> {
+    return this.http.get<GetQuizQuestionResponse>(this.url(`quiz/${quizId}/questions/${questionIndex}`));
   }
 
   submitQuiz(body: SubmitQuizRequest): Observable<QuizResult> {

@@ -59,21 +59,22 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApiLayer();
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddStudyPilotOpenTelemetry(builder.Configuration);
+var isDevelopment = builder.Environment.IsDevelopment();
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("auth-policy", o =>
     {
-        o.PermitLimit = 10;
+        o.PermitLimit = isDevelopment ? 100 : 10;
         o.Window = TimeSpan.FromMinutes(1);
     });
     options.AddFixedWindowLimiter("upload-policy", o =>
     {
-        o.PermitLimit = 5;
+        o.PermitLimit = isDevelopment ? 30 : 5;
         o.Window = TimeSpan.FromMinutes(1);
     });
     options.AddFixedWindowLimiter("quiz-policy", o =>
     {
-        o.PermitLimit = 20;
+        o.PermitLimit = isDevelopment ? 60 : 20;
         o.Window = TimeSpan.FromMinutes(1);
     });
     options.OnRejected = async (context, _) =>

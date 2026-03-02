@@ -11,6 +11,7 @@ using StudyPilot.Application.Progress.GetWeakConcepts;
 using StudyPilot.Application.Quiz.StartQuiz;
 using StudyPilot.Application.Auth.Logout;
 using StudyPilot.Application.Auth.Refresh;
+using StudyPilot.Application.Quiz.GetQuizQuestion;
 using StudyPilot.Application.Quiz.SubmitQuiz;
 
 namespace StudyPilot.API.Extensions;
@@ -30,9 +31,12 @@ public sealed class ApiMappingProfile : Profile
         CreateMap<StartQuizRequest, StartQuizCommand>().ForMember(c => c.UserId, o => o.Ignore());
         CreateMap<StartQuizQuestionSummary, QuizQuestionResponse>();
         CreateMap<StartQuizResult, StartQuizResponse>();
+        CreateMap<GetQuizQuestionResult, GetQuizQuestionResponse>()
+            .ForMember(d => d.Status, o => o.MapFrom(s => s.Status.ToString()));
         CreateMap<QuizAnswerRequest, QuizAnswerInput>();
         CreateMap<SubmitQuizRequest, SubmitQuizCommand>().ForMember(c => c.UserId, o => o.Ignore());
         CreateMap<SubmitQuizResult, SubmitQuizResponse>();
+        CreateMap<QuestionResultItem, QuestionResultResponse>();
         CreateMap<WeakConceptItem, WeakTopicResponse>();
         CreateMap<RefreshTokenRequest, RefreshTokenCommand>();
         CreateMap<RefreshTokenRequest, LogoutCommand>();

@@ -15,6 +15,7 @@ public sealed class QuizConfiguration : IEntityTypeConfiguration<Domain.Entities
 
         builder.Property(q => q.DocumentId);
         builder.Property(q => q.CreatedForUserId);
+        builder.Property(q => q.TotalQuestionCount);
 
         builder.HasIndex(q => q.DocumentId);
         var questionRelationship = builder.HasMany(typeof(Domain.Entities.Question))

@@ -30,6 +30,7 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     DocumentId = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedForUserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TotalQuestionCount = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -112,9 +113,15 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     QuizId = table.Column<Guid>(type: "uuid", nullable: false),
+                    QuestionIndex = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
                     Text = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
                     QuestionType = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     CorrectAnswer = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "Ready"),
+                    GenerationAttempts = table.Column<int>(type: "integer", nullable: false, defaultValue: 1),
+                    ErrorMessage = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    PromptVersion = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    ModelUsed = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     QuizId1 = table.Column<Guid>(type: "uuid", nullable: true),
                     Options = table.Column<string>(type: "jsonb", nullable: false),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -206,6 +213,12 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
                 name: "IX_Questions_QuizId",
                 table: "Questions",
                 column: "QuizId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Questions_QuizId_QuestionIndex",
+                table: "Questions",
+                columns: new[] { "QuizId", "QuestionIndex" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Questions_QuizId1",

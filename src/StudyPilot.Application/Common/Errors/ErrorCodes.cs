@@ -7,6 +7,7 @@ public static class ErrorCodes
     public const string DocumentTooLarge = "DOCUMENT_TOO_LARGE";
     public const string DocumentInvalidFormat = "DOCUMENT_INVALID_FORMAT";
     public const string QuizNotFound = "QUIZ_NOT_FOUND";
+    public const string QuizQuestionIndexOutOfRange = "QUIZ_QUESTION_INDEX_OUT_OF_RANGE";
     public const string QuizAlreadyCompleted = "QUIZ_ALREADY_COMPLETED";
     public const string AiServiceUnavailable = "AI_SERVICE_UNAVAILABLE";
     public const string RateLimitExceeded = "RATE_LIMIT_EXCEEDED";

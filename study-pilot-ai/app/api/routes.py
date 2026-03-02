@@ -33,7 +33,11 @@ async def generate_quiz(
     body: GenerateQuizRequest,
     service: QuizService = Depends(get_quiz_service),
 ):
-    questions = await service.generate_questions(body.concepts, body.question_count)
+    count = max(1, min(body.question_count or 3, 10))
+    questions = await service.generate_questions(body.concepts, count)
+    # If LLM returned truncated/invalid JSON (0 questions), retry once with fewer items
+    if not questions and count > 1:
+        questions = await service.generate_questions(body.concepts, 1)
     if not questions:
         raise HTTPException(
             status_code=503,

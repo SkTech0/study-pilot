@@ -3,13 +3,17 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
+import logging
+
 from app.api.routes import router
 from app.core.config import Settings
 from app.core.exceptions import global_exception_handler
 from app.services import ConceptService, QuizService
-from app.providers import get_provider
+from app.providers import get_provider, get_provider_chain_names
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 _settings: Settings | None = None
 _concept_service: ConceptService | None = None
@@ -43,7 +47,10 @@ def get_quiz_service() -> QuizService:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    provider = get_provider(get_settings())
+    settings = get_settings()
+    chain = get_provider_chain_names(settings)
+    logger.info("LLM provider chain (adapter): %s", ", ".join(chain) if chain else "none")
+    provider = get_provider(settings)
     app.state.concept_service = ConceptService(provider)
     app.state.quiz_service = QuizService(provider)
     yield

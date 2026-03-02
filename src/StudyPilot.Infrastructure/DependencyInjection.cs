@@ -75,6 +75,7 @@ public static class DependencyInjection
             options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(10);
         });
         services.AddScoped<IAIService, StudyPilotAIServiceAdapter>();
+        services.AddScoped<IQuestionGenerationDispatcher, QuestionGenerationDispatcher>();
 
         services.AddSingleton<ICorrelationIdAccessor, CorrelationIdAccessor>();
         services.Configure<StorageOptions>(config.GetSection(StorageOptions.SectionName));

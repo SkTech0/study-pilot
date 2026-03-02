@@ -109,6 +109,24 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("GenerationAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ModelUsed")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PromptVersion")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("QuestionIndex")
+                        .HasColumnType("integer");
+
                     b.Property<string>("QuestionType")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -119,6 +137,11 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("QuizId1")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("Text")
                         .IsRequired()
@@ -139,6 +162,9 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("QuizId1");
 
+                    b.HasIndex(new[] { "QuizId", "QuestionIndex" }, "IX_Questions_QuizId_QuestionIndex")
+                        .IsUnique();
+
                     b.ToTable("Questions", (string)null);
                 });
 
@@ -155,6 +181,9 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("DocumentId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("TotalQuestionCount")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");

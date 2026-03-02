@@ -47,6 +47,22 @@ def _build_fallback_chain(settings: Settings) -> list[tuple[str, LLMProvider]]:
     return out
 
 
+def get_provider_chain_names(settings: Settings) -> list[str]:
+    """Return the ordered list of provider names that will be used (only those with API keys)."""
+    chain = _build_fallback_chain(settings)
+    if chain:
+        return [name for name, _ in chain]
+    # Legacy path
+    use_gemini = (settings.llm_provider or "").strip().lower() == "gemini"
+    if use_gemini and _has_gemini_key(settings):
+        return ["gemini"]
+    if _has_openai_key(settings):
+        return ["openai"]
+    if _has_gemini_key(settings):
+        return ["gemini"]
+    return ["openai"]
+
+
 def get_provider(settings: Settings) -> LLMProvider:
     """
     Multi-LLM adapter: returns a FallbackAdapter over the configured chain (e.g. Gemini → DeepSeek → OpenRouter).
@@ -80,4 +96,5 @@ __all__ = [
     "OpenRouterProvider",
     "FallbackAdapter",
     "get_provider",
+    "get_provider_chain_names",
 ]

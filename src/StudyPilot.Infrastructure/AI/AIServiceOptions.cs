@@ -7,4 +7,6 @@ public sealed class AIServiceOptions
     /// <summary>HTTP timeout for AI service calls. Quiz generation uses at least 300s internally.</summary>
     public int TimeoutSeconds { get; set; } = 300;
     public int MaxTextLength { get; set; } = 50_000;
+    /// <summary>Base delay (ms) between question-generation retries (exponential backoff). Lower in Development for faster retries.</summary>
+    public int QuestionGenerationRetryBaseDelayMs { get; set; } = 500;
 }

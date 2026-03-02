@@ -9,6 +9,7 @@ using StudyPilot.API.Contracts.Responses;
 using StudyPilot.API.Extensions;
 using StudyPilot.Application.Abstractions.Observability;
 using StudyPilot.Application.Common.Models;
+using StudyPilot.Application.Quiz.GetQuizQuestion;
 using StudyPilot.Application.Quiz.StartQuiz;
 using StudyPilot.Application.Quiz.SubmitQuiz;
 
@@ -43,14 +44,28 @@ public sealed class QuizController : ControllerBase
     }
 
     [HttpPost("submit")]
+    [EnableRateLimiting("quiz-policy")]
     public async Task<ActionResult<ApiResponse<SubmitQuizResponse>>> Submit([FromBody] SubmitQuizRequest request, CancellationToken cancellationToken)
     {
         if (this.UnauthorizedIfNoUser<SubmitQuizResponse>(_correlationIdAccessor) is { } unauthorized)
             return unauthorized;
         var userId = User.GetCurrentUserId()!.Value;
-        var answers = request.Answers.Select(a => new QuizAnswerInput(a.QuestionId, a.SubmittedAnswer)).ToList();
+        var answers = request.Answers
+            .Select(a => new QuizAnswerInput(a.QuestionId, a.SubmittedAnswer, a.SubmittedOptionIndex))
+            .ToList();
         var command = new SubmitQuizCommand(request.QuizId, userId, answers);
         var result = await _mediator.Send(command, cancellationToken);
         return result.ToActionResult(_correlationIdAccessor?.Get(), v => _mapper.Map<SubmitQuizResponse>(v));
+    }
+
+    [HttpGet("{quizId:guid}/questions/{questionIndex:int}")]
+    [EnableRateLimiting("quiz-policy")]
+    public async Task<ActionResult<ApiResponse<GetQuizQuestionResponse>>> GetQuestion([FromRoute] Guid quizId, [FromRoute] int questionIndex, CancellationToken cancellationToken)
+    {
+        if (this.UnauthorizedIfNoUser<GetQuizQuestionResponse>(_correlationIdAccessor) is { } unauthorized)
+            return unauthorized;
+        var query = new GetQuizQuestionQuery(quizId, questionIndex);
+        var result = await _mediator.Send(query, cancellationToken);
+        return result.ToActionResult(_correlationIdAccessor?.Get(), v => _mapper.Map<GetQuizQuestionResponse>(v));
     }
 }

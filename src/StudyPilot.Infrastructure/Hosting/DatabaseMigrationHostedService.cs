@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using StudyPilot.Infrastructure.Persistence.DbContext;
 
 namespace StudyPilot.Infrastructure.Hosting;
@@ -31,6 +32,14 @@ public sealed class DatabaseMigrationHostedService : IHostedService
                 await db.Database.MigrateAsync(cancellationToken);
                 _logger.LogInformation("Database migration completed");
                 return;
+            }
+            catch (PostgresException pgEx) when (pgEx.SqlState == "42501")
+            {
+                var fix = "Run as postgres: psql -U postgres -d StudyPilot -f scripts/postgres-grant-public.sql (or see Prompts/RUN.md).";
+                _logger.LogError("Database migration failed: permission denied for schema public. {Fix}", fix);
+                throw new InvalidOperationException(
+                    "Permission denied for schema public. PostgreSQL 15+ requires explicit grants. " + fix,
+                    pgEx);
             }
             catch (Exception ex)
             {

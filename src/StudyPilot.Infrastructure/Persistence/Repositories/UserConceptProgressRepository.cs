@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using StudyPilot.Application.Abstractions.Persistence;
 using StudyPilot.Domain.Entities;
-using StudyPilot.Domain.ValueObjects;
 using StudyPilot.Infrastructure.Persistence.DbContext;
 
 namespace StudyPilot.Infrastructure.Persistence.Repositories;
@@ -21,8 +20,8 @@ public sealed class UserConceptProgressRepository : IUserConceptProgressReposito
 
     public async Task<IReadOnlyList<UserConceptProgress>> GetWeakByUserIdAsync(Guid userId, int threshold, CancellationToken cancellationToken = default)
     {
-        // Raw SQL so int params (userId, threshold) are not run through MasteryScore converter (avoids InvalidCastException).
-        // Then load entities by Id so ValueConverter is only used on materialization.
+        // Raw SQL for filter so threshold (int) is not run through MasteryScore converter (avoids InvalidCastException).
+        // Then load full entities by Id so the value converter is used only on materialization.
         var ids = await _db.Database
             .SqlQueryRaw<Guid>(
                 "SELECT \"Id\" AS \"Value\" FROM \"UserConceptProgresses\" WHERE \"UserId\" = {0} AND \"MasteryScore\" < {1}",

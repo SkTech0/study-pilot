@@ -28,10 +28,13 @@ public sealed class UsageGuardService : IUsageGuardService
 
     public async Task<bool> CanGenerateQuizAsync(Guid userId, CancellationToken cancellationToken = default)
     {
+        var limit = _options.MaxQuizGenerationPerHour;
+        if (limit <= 0)
+            return true;
         var since = DateTime.UtcNow.AddHours(-1);
         var count = await _db.Quizzes
             .Where(q => q.CreatedForUserId == userId && q.CreatedAtUtc >= since)
             .CountAsync(cancellationToken);
-        return count < _options.MaxQuizGenerationPerHour;
+        return count < limit;
     }
 }

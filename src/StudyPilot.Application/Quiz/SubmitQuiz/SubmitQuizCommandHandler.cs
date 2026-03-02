@@ -13,10 +13,12 @@ internal static class QuizGrading
     private static string Normalize(string? s)
     {
         if (string.IsNullOrWhiteSpace(s)) return "";
-        return string.Join(" ", (s.Trim() ?? "").Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)).Trim();
+        var trimmed = (s ?? "").Trim();
+        var t = string.Join(" ", trimmed.Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)).Trim();
+        return t.Length == 0 ? "" : t.Normalize(System.Text.NormalizationForm.FormKC);
     }
 
-    /// <summary>Resolve stored correct answer (option text, or letter A–D, or 1–4) to the exact option text for comparison.</summary>
+    /// <summary>Resolve stored correct answer (option text, or letter A–D, or 1–4) to the exact option text and optionally to 0-based index.</summary>
     public static string ResolveCorrectAnswerText(string correctAnswer, IReadOnlyList<string> options)
     {
         if (options.Count == 0) return Normalize(correctAnswer);
@@ -26,13 +28,32 @@ internal static class QuizGrading
             var idx = raw[0] - 'A';
             if (idx < options.Count) return Normalize(options[idx]);
         }
-        if (raw.Length == 1 && char.IsDigit(raw[0]))
+        if (raw.Length >= 1 && raw.All(char.IsDigit))
         {
-            var i = raw[0] - '0';
+            var i = int.TryParse(raw, out var n) ? n : -1;
             if (i >= 1 && i <= options.Count) return Normalize(options[i - 1]);
-            if (i < options.Count) return Normalize(options[i]);
+            if (i >= 0 && i < options.Count) return Normalize(options[i]);
         }
         return raw;
+    }
+
+    /// <summary>Get 0-based index of the correct option. Returns -1 if not determinable.</summary>
+    public static int ResolveCorrectAnswerIndex(string correctAnswer, IReadOnlyList<string> options)
+    {
+        if (options.Count == 0) return -1;
+        var raw = Normalize(correctAnswer);
+        if (raw.Length == 1 && raw[0] is >= 'A' and <= 'D')
+        {
+            var idx = raw[0] - 'A';
+            if (idx < options.Count) return idx;
+        }
+        if (raw.Length >= 1 && raw.All(char.IsDigit) && int.TryParse(raw, out var i))
+        {
+            if (i >= 1 && i <= options.Count) return i - 1;
+            if (i >= 0 && i < options.Count) return i;
+        }
+        var text = ResolveCorrectAnswerText(correctAnswer, options);
+        return IndexOfOption(options, text);
     }
 
     public static bool IsCorrect(string resolvedCorrect, string submittedAnswer, IReadOnlyList<string>? options = null)
@@ -48,6 +69,11 @@ internal static class QuizGrading
             if (correctIdx >= 0 && correctIdx == submittedIdx) return true;
         }
         return false;
+    }
+
+    public static bool IsCorrectByIndex(int correctIndex, int submittedIndex)
+    {
+        return correctIndex >= 0 && correctIndex == submittedIndex;
     }
 
     private static int IndexOfOption(IReadOnlyList<string> options, string normalizedText)
@@ -92,20 +118,42 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
         if (quiz is null)
             return Result<SubmitQuizResult>.Failure(new AppError(ErrorCodes.QuizNotFound, "Quiz not found.", null, ErrorSeverity.Business));
 
-        var answerMap = request.Answers.ToDictionary(a => a.QuestionId, a => a.SubmittedAnswer);
+        var quizQuestionIds = quiz.Questions.Select(q => q.Id).ToHashSet();
+        var answersByQuestion = request.Answers
+            .GroupBy(a => a.QuestionId)
+            .ToDictionary(g => g.Key, g => g.First());
+
         var correctCount = 0;
+        var questionResults = new List<QuestionResultItem>();
 
         foreach (var question in quiz.Questions)
         {
-            if (!answerMap.TryGetValue(question.Id, out var submittedAnswer))
+            if (!answersByQuestion.TryGetValue(question.Id, out var answer))
                 continue;
 
             var optionsList = question.Options.ToList();
-            var correctText = QuizGrading.ResolveCorrectAnswerText(question.CorrectAnswer, optionsList);
-            var isCorrect = QuizGrading.IsCorrect(correctText, submittedAnswer, optionsList);
-            if (isCorrect) correctCount++;
+            var submittedText = answer.SubmittedAnswer ?? "";
+            var submittedIndex = answer.SubmittedOptionIndex;
 
-            var userAnswer = new UserAnswer(request.UserId, question.Id, submittedAnswer, isCorrect);
+            var correctText = QuizGrading.ResolveCorrectAnswerText(question.CorrectAnswer, optionsList);
+            var correctIndex = QuizGrading.ResolveCorrectAnswerIndex(question.CorrectAnswer, optionsList);
+            bool isCorrect;
+            if (submittedIndex.HasValue && submittedIndex.Value >= 0 && submittedIndex.Value < optionsList.Count)
+            {
+                isCorrect = QuizGrading.IsCorrectByIndex(correctIndex, submittedIndex.Value);
+            }
+            else
+            {
+                isCorrect = QuizGrading.IsCorrect(correctText, submittedText, optionsList);
+            }
+
+            if (isCorrect) correctCount++;
+            questionResults.Add(new QuestionResultItem(question.Id, isCorrect, correctText, correctIndex));
+
+            var storedAnswerText = submittedIndex.HasValue && submittedIndex.Value >= 0 && submittedIndex.Value < optionsList.Count
+                ? optionsList[submittedIndex.Value]
+                : submittedText;
+            var userAnswer = new UserAnswer(request.UserId, question.Id, storedAnswerText, isCorrect);
             await _userAnswerRepository.AddAsync(userAnswer, cancellationToken);
 
             var conceptId = await _questionConceptLinkRepository.GetConceptIdForQuestionAsync(question.Id, cancellationToken);
@@ -130,6 +178,6 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await _cache.RemoveAsync(WeakTopicsCacheKeyPrefix + request.UserId, cancellationToken);
-        return Result<SubmitQuizResult>.Success(new SubmitQuizResult(correctCount, quiz.Questions.Count));
+        return Result<SubmitQuizResult>.Success(new SubmitQuizResult(correctCount, quiz.Questions.Count, questionResults));
     }
 }

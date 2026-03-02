@@ -43,4 +43,15 @@ public sealed class OpenAIService : IAIService
         )).ToList();
         return new GenerateQuizResult(questions);
     }
+
+    public async Task<GeneratedQuestion?> GenerateQuestionAsync(Guid documentId, Guid userId, ConceptInfo concept, CancellationToken cancellationToken = default)
+    {
+        await Task.CompletedTask;
+        return new GeneratedQuestion(
+            $"Sample question about {concept.Name}?",
+            QuestionType.MCQ,
+            "Correct",
+            ["Correct", "Wrong", "Also wrong"],
+            concept.Id);
+    }
 }

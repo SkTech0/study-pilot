@@ -29,13 +29,38 @@ public sealed class StudyPilotAIServiceAdapter : IAIService
         var result = await _client.GenerateQuizAsync(documentId, names, count, cancellationToken);
         var conceptIds = selectedConcepts.Select(c => c.Id).ToList();
         var questions = result.Questions
+            .Where(q => !string.IsNullOrWhiteSpace(q.CorrectAnswer))
             .Select((q, i) => new GeneratedQuestion(
                 q.Text,
                 QuestionType.MCQ,
-                q.CorrectAnswer,
+                (q.CorrectAnswer ?? "").Trim(),
                 q.Options,
-                i < conceptIds.Count ? conceptIds[i] : Guid.Empty))
+                i < conceptIds.Count ? conceptIds[i] : Guid.Empty,
+                result.PromptVersion,
+                result.ModelName,
+                result.Temperature,
+                result.TokenUsage))
             .ToList();
         return new GenerateQuizResult(questions);
+    }
+
+    public async Task<GeneratedQuestion?> GenerateQuestionAsync(Guid documentId, Guid userId, ConceptInfo concept, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(concept.Name))
+            return null;
+        var result = await _client.GenerateQuizAsync(documentId, new[] { concept.Name }, 1, cancellationToken);
+        var q = result.Questions?.FirstOrDefault();
+        if (q is null || string.IsNullOrWhiteSpace(q.CorrectAnswer))
+            return null;
+        return new GeneratedQuestion(
+            q.Text,
+            QuestionType.MCQ,
+            (q.CorrectAnswer ?? "").Trim(),
+            q.Options ?? new List<string>(),
+            concept.Id,
+            result.PromptVersion,
+            result.ModelName,
+            result.Temperature,
+            result.TokenUsage);
     }
 }

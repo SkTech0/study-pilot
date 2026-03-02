@@ -22,6 +22,10 @@ public sealed class QuizRepository : IQuizRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(q => q.Id == id, cancellationToken);
 
+    public async Task<Question?> GetQuestionByQuizAndIndexAsync(Guid quizId, int questionIndex, CancellationToken cancellationToken = default) =>
+        await _db.Questions
+            .FirstOrDefaultAsync(q => q.QuizId == quizId && q.QuestionIndex == questionIndex, cancellationToken);
+
     public async Task AddAsync(Quiz quiz, CancellationToken cancellationToken = default)
     {
         await _db.Quizzes.AddAsync(quiz, cancellationToken);
@@ -29,9 +33,42 @@ public sealed class QuizRepository : IQuizRepository
             await _db.Questions.AddRangeAsync(quiz.Questions.ToList(), cancellationToken);
     }
 
+    public async Task<bool> TryAddQuestionAsync(Question question, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _db.Questions.AddAsync(question, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            return false;
+        }
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        var msg = ex.InnerException?.Message ?? ex.Message;
+        return msg.Contains("unique", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("duplicate key", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("23505", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public async Task AddQuestionAsync(Question question, CancellationToken cancellationToken = default)
+    {
+        await _db.Questions.AddAsync(question, cancellationToken);
+    }
+
     public Task UpdateAsync(Quiz quiz, CancellationToken cancellationToken = default)
     {
         _db.Quizzes.Update(quiz);
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateQuestionAsync(Question question, CancellationToken cancellationToken = default)
+    {
+        _db.Questions.Update(question);
         return Task.CompletedTask;
     }
 }

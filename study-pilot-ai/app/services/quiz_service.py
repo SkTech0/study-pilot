@@ -3,10 +3,12 @@ from app.providers.base import LLMProvider
 
 
 def _normalize_correct_answer(correct: str, options: list[str]) -> str:
-    """Map LLM output (e.g. 'A', '1', or option text) to the exact option text for grading."""
+    """Map LLM output (e.g. 'A', '1', or option text) to the exact option text for grading. Never guess—return raw if no match."""
     if not options:
         return (correct or "").strip()
     raw = (correct or "").strip()
+    if not raw:
+        return ""
     # Letter A–D (0-based index)
     if len(raw) == 1 and raw.upper() in "ABCD":
         idx = ord(raw.upper()) - ord("A")
@@ -23,7 +25,7 @@ def _normalize_correct_answer(correct: str, options: list[str]) -> str:
     for opt in options:
         if opt.strip() == raw or (opt.strip() and raw and opt.strip().lower() == raw.lower()):
             return opt
-    return raw or options[0]
+    return raw
 
 
 class QuizService:
@@ -42,16 +44,14 @@ class QuizService:
             options = item.get("options") or []
             if not isinstance(options, list):
                 options = [str(o) for o in options] if options else []
-            correct = (
-                item.get("correctAnswer")
-                or item.get("correct_answer")
-                or (options[0] if options else "")
-            )
+            correct = item.get("correctAnswer") or item.get("correct_answer") or ""
             text = item.get("text") or item.get("question") or ""
             opts = [str(o) for o in (options[:4] if isinstance(options, list) else [])]
             if not text or not opts:
                 continue
             correct_text = _normalize_correct_answer(str(correct).strip() if correct else "", opts)
+            if not correct_text.strip():
+                continue
             result.append(
                 QuizQuestionOut(
                     text=str(text),
