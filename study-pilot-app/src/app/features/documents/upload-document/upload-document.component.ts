@@ -9,20 +9,40 @@ import { EnterpriseApiError } from '@core/http/enterprise-api-error';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="p-4 max-w-md">
-      <h1 class="text-xl font-semibold mb-4">Upload document</h1>
-      <form (ngSubmit)="onSubmit($event)">
-        <input type="file" accept=".pdf,application/pdf" (change)="onFileChange($event)" class="mb-4 block w-full text-sm" />
-        <button type="submit" [disabled]="!file() || uploading()"
-                class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50">
-          {{ uploading() ? 'Uploading...' : 'Upload' }}
+    <div class="p-4 sm:p-6 max-w-lg mx-auto">
+      <div class="mb-6">
+        <h1 class="text-2xl font-semibold text-gray-900">Upload document</h1>
+        <p class="mt-1 text-sm text-gray-500">Upload a PDF to generate AI-powered quizzes</p>
+      </div>
+      <div class="card"
+           (dragover)="$event.preventDefault(); dragActive.set(true)"
+           (dragleave)="dragActive.set(false)"
+           (drop)="$event.preventDefault(); dragActive.set(false); onDrop($event)">
+        <input #fileInput type="file" accept=".pdf,application/pdf" (change)="onFileChange($event)"
+               class="sr-only" />
+        <div (click)="fileInput.click()" role="button" tabindex="0"
+             class="w-full border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+             [class.border-blue-400]="dragActive()"
+             [class.bg-blue-100]="dragActive()"
+             [class.border-gray-300]="!dragActive()">
+          <span class="text-4xl text-gray-400 block" aria-hidden="true">&#128196;</span>
+          <span class="mt-2 block text-sm font-medium text-gray-700">Drop your PDF here or click to browse</span>
+          <span class="mt-1 block text-xs text-gray-500">Only PDF files are supported</span>
+        </div>
+      </div>
+      @if (file()) {
+        <div class="mt-4 flex items-center justify-between gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
+          <span class="text-sm font-medium text-gray-900 truncate">{{ file()?.name }}</span>
+          <button type="button" (click)="file.set(null); errorMessage.set(null)" class="text-sm text-gray-500 hover:text-gray-700 shrink-0">Remove</button>
+        </div>
+      }
+      <form (ngSubmit)="onSubmit($event)" class="mt-4">
+        <button type="submit" [disabled]="!file() || uploading()" class="btn-primary w-full">
+          {{ uploading() ? 'Uploading…' : 'Upload' }}
         </button>
       </form>
-      @if (file()) {
-        <p class="mt-2 text-sm text-gray-600">Selected: {{ file()?.name }}</p>
-      }
       @if (errorMessage()) {
-        <p class="mt-2 text-sm text-red-600">{{ errorMessage() }}</p>
+        <p class="mt-3 text-sm text-red-600" role="alert">{{ errorMessage() }}</p>
       }
     </div>
   `
@@ -34,6 +54,7 @@ export class UploadDocumentComponent {
   file = signal<File | null>(null);
   uploading = signal(false);
   errorMessage = signal<string | null>(null);
+  dragActive = signal(false);
 
   onFileChange(e: Event): void {
     const input = e.target as HTMLInputElement;
@@ -44,6 +65,17 @@ export class UploadDocumentComponent {
     } else {
       this.file.set(null);
       this.errorMessage.set(f ? 'Please select a PDF file.' : null);
+    }
+  }
+
+  onDrop(e: DragEvent): void {
+    const f = e.dataTransfer?.files?.[0];
+    if (f?.name.toLowerCase().endsWith('.pdf')) {
+      this.file.set(f);
+      this.errorMessage.set(null);
+    } else if (f) {
+      this.file.set(null);
+      this.errorMessage.set('Please select a PDF file.');
     }
   }
 
