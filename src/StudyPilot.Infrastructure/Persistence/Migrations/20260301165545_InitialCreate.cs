@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -145,6 +145,7 @@ namespace StudyPilot.Infrastructure.Persistence.Migrations
                     FileName = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     StoragePath = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
                     ProcessingStatus = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    FailureReason = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
