@@ -7,7 +7,7 @@ from app.api.routes import router
 from app.core.config import Settings
 from app.core.exceptions import global_exception_handler
 from app.services import ConceptService, QuizService
-from app.providers import OpenAIProvider
+from app.providers import get_provider
 
 load_dotenv()
 
@@ -23,8 +23,8 @@ def get_settings() -> Settings:
     return _settings
 
 
-def _get_provider() -> OpenAIProvider:
-    return OpenAIProvider(get_settings())
+def _get_provider():
+    return get_provider(get_settings())
 
 
 def get_concept_service() -> ConceptService:
@@ -43,8 +43,9 @@ def get_quiz_service() -> QuizService:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.concept_service = ConceptService(OpenAIProvider(get_settings()))
-    app.state.quiz_service = QuizService(OpenAIProvider(get_settings()))
+    provider = get_provider(get_settings())
+    app.state.concept_service = ConceptService(provider)
+    app.state.quiz_service = QuizService(provider)
     yield
 
 

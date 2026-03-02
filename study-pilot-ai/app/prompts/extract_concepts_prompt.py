@@ -8,7 +8,7 @@ Content:
 ---
 
 Respond with a JSON array of objects, each with "name" and "description" (description may be null).
-Example: [{"name": "Concept A", "description": "Brief explanation"}, {"name": "Concept B", "description": null}]
+Example: [{{"name": "Concept A", "description": "Brief explanation"}}, {{"name": "Concept B", "description": null}}]
 Return only valid JSON, no markdown or extra text.""".format(
         text=text[:15000]
     )

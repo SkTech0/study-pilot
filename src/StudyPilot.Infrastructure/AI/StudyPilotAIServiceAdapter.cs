@@ -19,10 +19,15 @@ public sealed class StudyPilotAIServiceAdapter : IAIService
 
     public async Task<GenerateQuizResult> GenerateQuizAsync(Guid documentId, Guid userId, IReadOnlyList<ConceptInfo> concepts, CancellationToken cancellationToken = default)
     {
-        var names = concepts.Select(c => c.Name).ToList();
-        var count = Math.Min(10, Math.Max(1, concepts.Count));
+        // Keep payload small to reduce token usage and rate-limit risk on free-tier LLMs.
+        var selectedConcepts = concepts
+            .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+            .Take(8)
+            .ToList();
+        var names = selectedConcepts.Select(c => c.Name).ToList();
+        var count = Math.Min(5, Math.Max(1, names.Count));
         var result = await _client.GenerateQuizAsync(documentId, names, count, cancellationToken);
-        var conceptIds = concepts.Select(c => c.Id).ToList();
+        var conceptIds = selectedConcepts.Select(c => c.Id).ToList();
         var questions = result.Questions
             .Select((q, i) => new GeneratedQuestion(
                 q.Text,

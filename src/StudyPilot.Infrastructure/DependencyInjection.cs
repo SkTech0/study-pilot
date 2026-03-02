@@ -63,6 +63,9 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
         }).AddStandardResilienceHandler(options =>
         {
+            // Circuit breaker makes local/dev flows flaky with free-tier LLM rate limits (429),
+            // because a brief outage can block subsequent calls for an extended period.
+            options.CircuitBreaker.ShouldHandle = _ => new ValueTask<bool>(false);
             options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
             options.CircuitBreaker.FailureRatio = 0.5;
             options.CircuitBreaker.MinimumThroughput = 3;

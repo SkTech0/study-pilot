@@ -31,7 +31,7 @@ class QuizQuestionOut(BaseModel):
     model_config = ConfigDict(serialize_by_alias=True)
     text: str
     options: list[str]
-    correct_answer: str = Field(..., alias="correctAnswer")
+    correct_answer: str = Field("", alias="correctAnswer")
 
 
 class GenerateQuizResponse(BaseModel):

@@ -6,7 +6,7 @@
 - **Node.js 18+** and npm  
 - **PostgreSQL 16** (running locally, or use Docker only for Postgres)  
 - **Python 3.12** (for AI service)  
-- **OpenAI API key** (for AI features)
+- **Gemini API key** (recommended) or **OpenAI API key** (for AI features)
 
 ---
 
@@ -16,19 +16,10 @@ From the repo root:
 
 ```bash
 cd deploy
-cp .env .env.local
-# Edit .env.local: set OPENAI_API_KEY=sk-... and optionally Jwt__Secret, ConnectionStrings__Default
+cp .env.example .env
+# Edit .env: set GEMINI_API_KEY=your-key (or OPENAI_API_KEY) and Jwt__Secret, ConnectionStrings__Default
 docker compose up --build
-```Request URL
-http://localhost:4200/api/progress/weak-topics
-Request Method
-GET
-Status Code
-500 Internal Server Error
-Remote Address
-[::1]:4200
-Referrer Policy
-strict-origin-when-cross-origin
+```
 
 - **Frontend:** http://localhost:8080  
 - **API:** http://localhost:8081  
@@ -53,10 +44,13 @@ Or use defaults: database `StudyPilot`, user `postgres`, password `postgres` (al
 
 ### 2. AI service (Python)
 
+Uses **Gemini** by default if `GEMINI_API_KEY` is set; otherwise falls back to OpenAI.
+
 ```bash
 cd study-pilot-ai
 pip install -e .
-export OPENAI_API_KEY=sk-your-key
+export GEMINI_API_KEY=your-gemini-api-key
+# Or: export OPENAI_API_KEY=sk-your-key  and  export LLM_PROVIDER=openai
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
