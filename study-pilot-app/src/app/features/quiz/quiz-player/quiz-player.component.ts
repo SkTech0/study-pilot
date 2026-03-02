@@ -10,46 +10,58 @@ import { QuizStateService } from '../quiz-state.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DecimalPipe],
   template: `
-    <div class="p-4 max-w-2xl mx-auto">
+    <div class="p-4 sm:p-6 max-w-2xl mx-auto">
       @if (result()) {
-        <div class="rounded border p-4 bg-gray-50">
-          <h2 class="text-lg font-semibold mb-2">Quiz complete</h2>
-          <p>Score: {{ result()!.correctCount }} / {{ result()!.totalCount }} ({{ result()!.totalCount ? (result()!.correctCount / result()!.totalCount * 100) : 0 | number:'1.0-0' }}%)</p>
-          <button (click)="goDashboard()" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded">Back to dashboard</button>
+        <div class="card text-center">
+          <h2 class="text-xl font-semibold text-gray-900 mb-2">Quiz complete</h2>
+          <p class="text-gray-600">Score: {{ result()!.correctCount }} / {{ result()!.totalCount }} ({{ result()!.totalCount ? (result()!.correctCount / result()!.totalCount * 100) : 0 | number:'1.0-0' }}%)</p>
+          <button (click)="goDashboard()" class="btn-primary mt-6">Back to dashboard</button>
         </div>
       } @else if (session()) {
-        <div class="mb-4">
-          <span class="text-gray-600">Question {{ currentIndex() + 1 }} of {{ session()!.questions.length }}</span>
+        <div class="mb-4 flex items-center justify-between">
+          <span class="text-sm font-medium text-gray-500">Question {{ currentIndex() + 1 }} of {{ session()!.questions.length }}</span>
+          <div class="h-2 flex-1 max-w-[200px] ml-4 bg-gray-200 rounded-full overflow-hidden">
+            <div class="h-full bg-blue-600 rounded-full transition-all" [style.width.%]="(currentIndex() + 1) / session()!.questions.length * 100"></div>
+          </div>
         </div>
         @if (currentQuestion(); as q) {
-          <div class="rounded border p-4 bg-white shadow">
-            <p class="font-medium mb-4">{{ q.text }}</p>
-            <ul class="space-y-2">
+          <div class="card">
+            <p class="font-medium text-gray-900 mb-4 text-lg">{{ q.text }}</p>
+            <ul class="space-y-2" role="listbox" aria-label="Answer options">
               @for (opt of q.options; track $index) {
                 <li>
                   <button type="button"
                           (click)="select($index)"
-                          class="w-full text-left px-4 py-2 rounded border hover:bg-gray-100"
-                          [class.bg-blue-100]="selectedIndex() === $index">
+                          class="w-full text-left px-4 py-3 rounded-lg border-2 transition-colors font-medium"
+                          [class.border-blue-500]="selectedIndex() === $index"
+                          [class.bg-blue-50]="selectedIndex() === $index"
+                          [class.border-gray-200]="selectedIndex() !== $index"
+                          [class.hover:border-gray-300]="selectedIndex() !== $index">
                     {{ opt }}
                   </button>
                 </li>
               }
             </ul>
-            <div class="mt-4 flex gap-2">
+            <div class="mt-6 flex gap-2 flex-wrap">
               @if (currentIndex() > 0) {
-                <button (click)="prev()" class="px-4 py-2 border rounded">Previous</button>
+                <button type="button" (click)="prev()" class="btn-secondary">Previous</button>
               }
               @if (currentIndex() < session()!.questions.length - 1) {
-                <button (click)="next()" [disabled]="selectedIndex() === null" class="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">Next</button>
+                <button type="button" (click)="next()" [disabled]="selectedIndex() === null" class="btn-primary">Next</button>
               } @else {
-                <button (click)="submit()" [disabled]="selectedIndex() === null" class="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50">Submit</button>
+                <button type="button" (click)="submit()" [disabled]="selectedIndex() === null" class="btn-primary bg-green-600 hover:bg-green-700">Submit</button>
               }
             </div>
           </div>
         }
       } @else {
-        <p class="text-gray-600">Loading quiz...</p>
+        <div class="card text-center py-12">
+          <div class="animate-pulse flex flex-col items-center gap-3">
+            <span class="block h-4 bg-gray-200 rounded w-48"></span>
+            <span class="block h-4 bg-gray-100 rounded w-32"></span>
+          </div>
+          <p class="mt-4 text-gray-500">Loading quiz…</p>
+        </div>
       }
     </div>
   `
