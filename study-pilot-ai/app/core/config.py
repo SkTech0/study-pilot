@@ -8,5 +8,10 @@ class Settings(BaseSettings):
     model_name: str = "gpt-4o-mini"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
-    llm_provider: str = "gemini"  # "gemini" or "openai"
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+    openrouter_api_key: str = ""
+    openrouter_model: str = "google/gemini-2.0-flash-exp:free"
+    llm_provider: str = "gemini"  # legacy: "gemini" or "openai"
+    llm_fallback_chain: str = "gemini,deepseek,openrouter"  # comma-separated; first is primary
     request_timeout: float = 60.0

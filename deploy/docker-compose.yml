@@ -42,8 +42,11 @@ services:
       context: ../study-pilot-ai
       dockerfile: Dockerfile
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_FALLBACK_CHAIN: ${LLM_FALLBACK_CHAIN:-gemini,deepseek,openrouter}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
     networks:
       - studypilot

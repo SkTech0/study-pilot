@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import asyncio
@@ -9,6 +8,7 @@ from tenacity import retry, stop_after_attempt, retry_if_exception
 from app.core.config import Settings
 from app.prompts import get_extract_concepts_prompt, get_generate_quiz_prompt
 from app.providers.base import LLMProvider
+from app.providers.parse_utils import parse_json_array
 
 logger = logging.getLogger(__name__)
 
@@ -38,65 +38,6 @@ def _before_sleep_429(retry_state):
         wait,
         attempt,
     )
-
-
-def _strip_fences(raw: str) -> str:
-    raw = raw.strip()
-    if raw.startswith("```"):
-        lines = raw.split("\n")
-        raw = "\n".join(lines[1:-1]) if lines[0].startswith("```json") else "\n".join(lines[1:-1])
-    return raw.strip()
-
-
-def _repair_truncated_json_array(raw: str) -> str | None:
-    """If the LLM response was truncated (e.g. Unterminated string), try to close at last complete object."""
-    if not raw.strip():
-        return None
-    s = raw.strip()
-    if not s.startswith("["):
-        s = "[" + s
-    # Try cutting at each "}," (end of a complete object); use the rightmost that parses.
-    for i in range(len(s) - 1, -1, -1):
-        if i + 1 < len(s) and s[i] == "}" and s[i + 1] == ",":
-            candidate = s[: i + 1] + "]"
-            try:
-                parsed = json.loads(candidate)
-                if isinstance(parsed, list):
-                    return candidate
-            except json.JSONDecodeError:
-                continue
-    # Try cutting at any "}" (might be single object or last object without trailing comma)
-    for i in range(len(s) - 1, -1, -1):
-        if s[i] == "}":
-            candidate = s[: i + 1]
-            if not candidate.strip().endswith("]"):
-                candidate += "]"
-            try:
-                parsed = json.loads(candidate)
-                if isinstance(parsed, list):
-                    return candidate
-            except json.JSONDecodeError:
-                continue
-    return None
-
-
-def _parse_json_array(raw: str) -> list[dict]:
-    raw = _strip_fences(raw)
-    try:
-        out = json.loads(raw)
-        return out if isinstance(out, list) else [out] if isinstance(out, dict) else []
-    except json.JSONDecodeError as e:
-        repaired = _repair_truncated_json_array(raw)
-        if repaired:
-            try:
-                out = json.loads(repaired)
-                if isinstance(out, list):
-                    logger.warning("Quiz JSON was truncated; used %d complete question(s).", len(out))
-                    return out
-            except json.JSONDecodeError:
-                pass
-        logger.warning("Could not parse quiz JSON from LLM: %s. Returning empty list.", e)
-        return []
 
 
 # Minimum seconds between any two Gemini API calls to reduce 429s on free tier.
@@ -168,7 +109,7 @@ class GeminiProvider(LLMProvider):
     async def extract_concepts(self, text: str) -> list[dict]:
         prompt = get_extract_concepts_prompt(text)
         content = await self._generate(prompt)
-        return _parse_json_array(content)
+        return parse_json_array(content)
 
     async def generate_questions(self, concepts: list[dict], count: int) -> list[dict]:
         names = [c.get("name", "") for c in concepts if isinstance(c, dict)]
@@ -176,4 +117,4 @@ class GeminiProvider(LLMProvider):
             names = [str(c) for c in concepts]
         prompt = get_generate_quiz_prompt(names, count)
         content = await self._generate(prompt)
-        return _parse_json_array(content)
+        return parse_json_array(content)
