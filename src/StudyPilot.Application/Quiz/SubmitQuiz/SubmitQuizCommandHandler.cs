@@ -114,11 +114,11 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
 
     public async Task<Result<SubmitQuizResult>> Handle(SubmitQuizCommand request, CancellationToken cancellationToken)
     {
-        var quiz = await _quizRepository.GetByIdWithQuestionsAsync(request.QuizId, cancellationToken);
+        var quiz = await _quizRepository.GetByIdAsync(request.QuizId, cancellationToken);
         if (quiz is null)
             return Result<SubmitQuizResult>.Failure(new AppError(ErrorCodes.QuizNotFound, "Quiz not found.", null, ErrorSeverity.Business));
 
-        var quizQuestionIds = quiz.Questions.Select(q => q.Id).ToHashSet();
+        var questions = await _quizRepository.GetQuestionsByQuizIdAsync(request.QuizId, cancellationToken);
         var answersByQuestion = request.Answers
             .GroupBy(a => a.QuestionId)
             .ToDictionary(g => g.Key, g => g.First());
@@ -126,7 +126,7 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
         var correctCount = 0;
         var questionResults = new List<QuestionResultItem>();
 
-        foreach (var question in quiz.Questions)
+        foreach (var question in questions)
         {
             if (!answersByQuestion.TryGetValue(question.Id, out var answer))
                 continue;
@@ -178,6 +178,6 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await _cache.RemoveAsync(WeakTopicsCacheKeyPrefix + request.UserId, cancellationToken);
-        return Result<SubmitQuizResult>.Success(new SubmitQuizResult(correctCount, quiz.Questions.Count, questionResults));
+        return Result<SubmitQuizResult>.Success(new SubmitQuizResult(correctCount, questions.Count, questionResults));
     }
 }

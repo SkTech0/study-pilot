@@ -4,7 +4,8 @@
 # - .NET API on http://localhost:5024
 # - Frontend (Angular) on http://localhost:4200
 #
-# Prereqs: Python 3.12+, pip install -e . in study-pilot-ai, .env with GEMINI_API_KEY; .NET SDK; Node for frontend.
+# Prereqs: Python 3.12+, pip install -e . in study-pilot-ai; .NET SDK; Node for frontend.
+# The AI service is started with AI_MODE=mock so no API keys are needed for local testing.
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = if ($PSScriptRoot) { (Resolve-Path (Join-Path $PSScriptRoot "..")).Path } else { (Get-Location).Path }
@@ -35,8 +36,8 @@ $aiEnv = Join-Path $aiDir ".env"
 if (-not (Test-Path $aiEnv)) {
     Write-Host "[WARN] study-pilot-ai/.env not found. Copy from .env.example and set GEMINI_API_KEY (or OPENAI_API_KEY)." -ForegroundColor Yellow
 }
-Write-Host "Starting AI service (Python) at http://localhost:8000 ..." -ForegroundColor Cyan
-$aiCmd = "Write-Host 'AI service - port 8000' -ForegroundColor Green; pip install -e .; python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+Write-Host "Starting AI service (Python) at http://localhost:8000 (mock mode for local testing) ..." -ForegroundColor Cyan
+$aiCmd = "`$env:AI_MODE='mock'; Write-Host 'AI service - port 8000 (mock mode)' -ForegroundColor Green; pip install -e .; python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $aiCmd -WorkingDirectory $aiDir
 Start-Sleep -Seconds 2
 

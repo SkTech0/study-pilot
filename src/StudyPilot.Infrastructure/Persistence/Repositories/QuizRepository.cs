@@ -17,6 +17,13 @@ public sealed class QuizRepository : IQuizRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(q => q.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyList<Question>> GetQuestionsByQuizIdAsync(Guid quizId, CancellationToken cancellationToken = default) =>
+        await _db.Questions
+            .AsNoTracking()
+            .Where(q => q.QuizId == quizId)
+            .OrderBy(q => q.QuestionIndex)
+            .ToListAsync(cancellationToken);
+
     public async Task<Quiz?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         await _db.Quizzes
             .AsNoTracking()

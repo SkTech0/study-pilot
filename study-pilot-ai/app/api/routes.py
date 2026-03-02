@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi.responses import JSONResponse
 
 from app.models.schemas import (
     ExtractConceptsRequest,
@@ -43,4 +44,5 @@ async def generate_quiz(
             status_code=503,
             detail="Quiz generation produced no questions. The AI service may be unavailable or rate-limited. Please try again.",
         )
-    return GenerateQuizResponse(questions=questions)
+    response = GenerateQuizResponse(questions=questions)
+    return JSONResponse(content=response.model_dump(mode="json", by_alias=True))

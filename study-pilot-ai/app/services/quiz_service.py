@@ -50,6 +50,8 @@ class QuizService:
             if not text or not opts:
                 continue
             correct_text = _normalize_correct_answer(str(correct).strip() if correct else "", opts)
+            if not correct_text.strip() and str(correct).strip() in opts:
+                correct_text = str(correct).strip()
             if not correct_text.strip():
                 continue
             result.append(

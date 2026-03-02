@@ -28,11 +28,12 @@ class GenerateQuizRequest(BaseModel):
 
 
 class QuizQuestionOut(BaseModel):
-    model_config = ConfigDict(serialize_by_alias=True)
+    model_config = ConfigDict(serialize_by_alias=True, populate_by_name=True)
     text: str
     options: list[str]
     correct_answer: str = Field("", alias="correctAnswer")
 
 
 class GenerateQuizResponse(BaseModel):
+    model_config = ConfigDict(serialize_by_alias=True)
     questions: list[QuizQuestionOut]

@@ -3,6 +3,8 @@ namespace StudyPilot.Application.Abstractions.Persistence;
 public interface IQuizRepository
 {
     Task<Domain.Entities.Quiz?> GetByIdWithQuestionsAsync(Guid id, CancellationToken cancellationToken = default);
+    /// <summary>Load all questions for a quiz (for submit/grading when navigation may not be populated).</summary>
+    Task<IReadOnlyList<Domain.Entities.Question>> GetQuestionsByQuizIdAsync(Guid quizId, CancellationToken cancellationToken = default);
     Task<Domain.Entities.Quiz?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Domain.Entities.Question?> GetQuestionByQuizAndIndexAsync(Guid quizId, int questionIndex, CancellationToken cancellationToken = default);
     Task AddAsync(Domain.Entities.Quiz quiz, CancellationToken cancellationToken = default);
