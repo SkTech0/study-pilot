@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using AutoMapper;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -39,9 +38,9 @@ public sealed class DocumentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<UploadDocumentResponse>>> Upload([FromForm(Name = "file")] IFormFile? file, CancellationToken cancellationToken)
     {
         var correlationId = _correlationIdAccessor?.Get();
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            return new ObjectResult(ApiResponse<UploadDocumentResponse>.Fail(new[] { new AppError(ErrorCodes.AuthInvalidToken, "Invalid user.", null, ErrorSeverity.System, correlationId) }, correlationId)) { StatusCode = 401 };
+        if (this.UnauthorizedIfNoUser<UploadDocumentResponse>(_correlationIdAccessor) is { } unauthorized)
+            return unauthorized;
+        var userId = User.GetCurrentUserId()!.Value;
 
         if (file is null || file.Length == 0)
             return BadRequest(ApiResponse<UploadDocumentResponse>.Fail(new[] { ValidationErrorFactory.Create(ErrorCodes.ValidationFailed, "No file provided. Send as multipart/form-data with field name 'file'.", "file") }, correlationId));
@@ -79,10 +78,9 @@ public sealed class DocumentsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<DocumentResponse>>>> GetDocuments(CancellationToken cancellationToken)
     {
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            return new ObjectResult(ApiResponse<IReadOnlyList<DocumentResponse>>.Fail(new[] { new AppError(ErrorCodes.AuthInvalidToken, "Invalid user.", null, ErrorSeverity.System, _correlationIdAccessor?.Get()) }, _correlationIdAccessor?.Get())) { StatusCode = 401 };
-
+        if (this.UnauthorizedIfNoUser<IReadOnlyList<DocumentResponse>>(_correlationIdAccessor) is { } unauthorized)
+            return unauthorized;
+        var userId = User.GetCurrentUserId()!.Value;
         var query = new GetDocumentsQuery(userId);
         var result = await _mediator.Send(query, cancellationToken);
         return result.ToActionResult(_correlationIdAccessor?.Get(), list => (IReadOnlyList<DocumentResponse>)list!.Select(_mapper.Map<DocumentResponse>).ToList());

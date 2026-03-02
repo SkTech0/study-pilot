@@ -59,7 +59,8 @@ public static class DependencyInjection
         {
             var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AIServiceOptions>>().Value;
             client.BaseAddress = new Uri(opts.BaseUrl.TrimEnd('/') + "/");
-            client.Timeout = TimeSpan.FromSeconds(opts.TimeoutSeconds);
+            var timeoutSeconds = opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 60;
+            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
         }).AddStandardResilienceHandler(options =>
         {
             options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);

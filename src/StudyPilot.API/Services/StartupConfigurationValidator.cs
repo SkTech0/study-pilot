@@ -18,8 +18,7 @@ public static class StartupConfigurationValidator
             missing.Add("ConnectionStrings__Default");
         if (string.IsNullOrWhiteSpace(config["AIService:BaseUrl"]))
             missing.Add("AIService__BaseUrl");
-        if (string.IsNullOrWhiteSpace(config["AIService:TimeoutSeconds"]))
-            missing.Add("AIService__TimeoutSeconds");
+        // TimeoutSeconds is optional; default 60 is applied in AIServiceOptions
         if (missing.Count == 0) return;
         var message = $"Missing required configuration: {string.Join(", ", missing)}";
         Serilog.Log.Fatal(message);
