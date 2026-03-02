@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any
 
@@ -6,8 +7,11 @@ from app.providers.base import LLMProvider
 from app.providers.deepseek_provider import DeepSeekProvider
 from app.providers.fallback_adapter import FallbackAdapter
 from app.providers.gemini_provider import GeminiProvider
+from app.providers.mock_provider import MockProvider
 from app.providers.openai_provider import OpenAIProvider
 from app.providers.openrouter_provider import OpenRouterProvider
+
+logger = logging.getLogger(__name__)
 
 
 def _has_gemini_key(settings: Settings) -> bool:
@@ -49,6 +53,8 @@ def _build_fallback_chain(settings: Settings) -> list[tuple[str, LLMProvider]]:
 
 def get_provider_chain_names(settings: Settings) -> list[str]:
     """Return the ordered list of provider names that will be used (only those with API keys)."""
+    if (settings.ai_mode or "real").strip().lower() == "mock":
+        return ["mock"]
     chain = _build_fallback_chain(settings)
     if chain:
         return [name for name, _ in chain]
@@ -68,7 +74,11 @@ def get_provider(settings: Settings) -> LLMProvider:
     Multi-LLM adapter: returns a FallbackAdapter over the configured chain (e.g. Gemini → DeepSeek → OpenRouter).
     Only providers with API keys set are included. If no provider in the chain has a key, falls back to legacy
     single-provider selection (LLM_PROVIDER + OpenAI/Gemini).
+    When AI_MODE=mock, returns MockProvider and no external providers are used.
     """
+    if (settings.ai_mode or "real").strip().lower() == "mock":
+        logger.info("Using Mock AI Provider (development mode)")
+        return MockProvider()
     chain = _build_fallback_chain(settings)
     if chain:
         providers = [p for _, p in chain]
@@ -90,6 +100,7 @@ def get_provider(settings: Settings) -> LLMProvider:
 
 __all__ = [
     "LLMProvider",
+    "MockProvider",
     "OpenAIProvider",
     "GeminiProvider",
     "DeepSeekProvider",
