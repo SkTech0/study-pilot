@@ -50,6 +50,9 @@ public sealed class StartQuizCommandHandler : IRequestHandler<StartQuizCommand, 
             return Result<StartQuizResult>.Failure(new AppError(ErrorCodes.DocumentNoConcepts, "Document has no concepts. Process the document first.", null, ErrorSeverity.Business));
 
         var quizResult = await _aiService.GenerateQuizAsync(request.DocumentId, request.UserId, conceptInfos, cancellationToken);
+        if (quizResult?.Questions is null || quizResult.Questions.Count == 0)
+            return Result<StartQuizResult>.Failure(new AppError(ErrorCodes.QuizNoQuestionsGenerated, "Quiz generation returned no questions. The AI service may be unavailable or rate-limited. Please try again later.", null, ErrorSeverity.Business));
+
         var quiz = new Domain.Entities.Quiz(request.DocumentId, request.UserId);
 
         foreach (var gq in quizResult.Questions)

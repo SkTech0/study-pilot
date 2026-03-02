@@ -20,6 +20,7 @@ public static class ErrorCodes
     public const string DocumentNotFound = "DOCUMENT_NOT_FOUND";
     public const string DocumentNoConcepts = "DOCUMENT_NO_CONCEPTS";
     public const string QuizGenerationLimitReached = "QUIZ_GENERATION_LIMIT_REACHED";
+    public const string QuizNoQuestionsGenerated = "QUIZ_NO_QUESTIONS_GENERATED";
     public const string UserNotFound = "USER_NOT_FOUND";
     public const string RefreshTokenInvalid = "REFRESH_TOKEN_INVALID";
 }

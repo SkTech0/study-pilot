@@ -3,6 +3,7 @@ import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { StudyPilotApiService, QuizSession, QuizQuestion } from '@core/services/study-pilot-api.service';
 import { QuizStateService } from '../quiz-state.service';
+import { EnterpriseApiError } from '@core/http/enterprise-api-error';
 
 @Component({
   selector: 'app-quiz-player',
@@ -17,11 +18,17 @@ import { QuizStateService } from '../quiz-state.service';
           <p class="text-gray-600">Score: {{ result()!.correctCount }} / {{ result()!.totalCount }} ({{ result()!.totalCount ? (result()!.correctCount / result()!.totalCount * 100) : 0 | number:'1.0-0' }}%)</p>
           <button (click)="goDashboard()" class="btn-primary mt-6">Back to dashboard</button>
         </div>
+      } @else if (session() && session()!.questions.length === 0) {
+        <div class="card text-center py-12">
+          <h2 class="text-lg font-semibold text-gray-900 mb-2">No questions generated</h2>
+          <p class="text-gray-600 mb-6">Quiz generation produced no questions for this document. The AI service may be busy or rate-limited. Try again in a moment.</p>
+          <button type="button" (click)="goDashboard()" class="btn-primary">Back to dashboard</button>
+        </div>
       } @else if (session()) {
         <div class="mb-4 flex items-center justify-between">
           <span class="text-sm font-medium text-gray-500">Question {{ currentIndex() + 1 }} of {{ session()!.questions.length }}</span>
           <div class="h-2 flex-1 max-w-[200px] ml-4 bg-gray-200 rounded-full overflow-hidden">
-            <div class="h-full bg-blue-600 rounded-full transition-all" [style.width.%]="(currentIndex() + 1) / session()!.questions.length * 100"></div>
+            <div class="h-full bg-blue-600 rounded-full transition-all" [style.width.%]="questionProgress()"></div>
           </div>
         </div>
         @if (currentQuestion(); as q) {
@@ -54,6 +61,12 @@ import { QuizStateService } from '../quiz-state.service';
             </div>
           </div>
         }
+      } @else if (startError()) {
+        <div class="card text-center py-12">
+          <h2 class="text-lg font-semibold text-gray-900 mb-2">Could not start quiz</h2>
+          <p class="text-gray-600 mb-6">{{ startError() }}</p>
+          <button type="button" (click)="goDashboard()" class="btn-primary">Back to dashboard</button>
+        </div>
       } @else {
         <div class="card text-center py-12">
           <div class="animate-pulse flex flex-col items-center gap-3">
@@ -73,6 +86,7 @@ export class QuizPlayerComponent implements OnInit {
   private readonly state = inject(QuizStateService);
   session = this.state.currentSession;
   result = this.state.currentResult;
+  startError = signal<string | null>(null);
   currentIndex = signal(0);
   selectedIndex = signal<number | null>(null);
   answers = signal<Record<string, number>>({});
@@ -81,6 +95,13 @@ export class QuizPlayerComponent implements OnInit {
     const s = this.session();
     const i = this.currentIndex();
     return (s && s.questions[i]) ?? null;
+  });
+
+  questionProgress = computed(() => {
+    const s = this.session();
+    const len = s?.questions.length ?? 0;
+    if (len === 0) return 0;
+    return ((this.currentIndex() + 1) / len) * 100;
   });
 
   ngOnInit(): void {
@@ -92,9 +113,16 @@ export class QuizPlayerComponent implements OnInit {
     }
     this.api.startQuiz(documentId).subscribe({
       next: s => {
+        this.startError.set(null);
         this.state.setSession(s);
       },
-      error: () => this.router.navigate(['/dashboard'])
+      error: err => {
+        const message =
+          err instanceof EnterpriseApiError && err.errors.length > 0
+            ? err.errors[0].message
+            : 'Failed to start quiz. Please try again.';
+        this.startError.set(message);
+      }
     });
   }
 
@@ -133,6 +161,7 @@ export class QuizPlayerComponent implements OnInit {
   }
 
   goDashboard(): void {
+    this.startError.set(null);
     this.state.clear();
     this.router.navigate(['/dashboard']);
   }

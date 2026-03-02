@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 
 from app.models.schemas import (
     ExtractConceptsRequest,
@@ -34,4 +34,9 @@ async def generate_quiz(
     service: QuizService = Depends(get_quiz_service),
 ):
     questions = await service.generate_questions(body.concepts, body.question_count)
+    if not questions:
+        raise HTTPException(
+            status_code=503,
+            detail="Quiz generation produced no questions. The AI service may be unavailable or rate-limited. Please try again.",
+        )
     return GenerateQuizResponse(questions=questions)

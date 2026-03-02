@@ -58,4 +58,4 @@ class FallbackAdapter(LLMProvider):
                 )
         if last_error:
             raise last_error
-        return []
+        raise RuntimeError("No LLM providers available for generate_questions")
