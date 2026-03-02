@@ -4,7 +4,7 @@ import os
 import asyncio
 import time
 import httpx
-from tenacity import retry, stop_after_attempt, retry_if_exception, before_sleep_log
+from tenacity import retry, stop_after_attempt, retry_if_exception
 
 from app.core.config import Settings
 from app.prompts import get_extract_concepts_prompt, get_generate_quiz_prompt
@@ -23,9 +23,21 @@ def _wait_429(retry_state):
         ra = exc.response.headers.get("retry-after")
         if ra and str(ra).isdigit():
             return float(ra)
-    # 15, 30, 60, 90, 120, 120, …
+    # 15, 30, 60, 120, 120, …
     attempt = retry_state.attempt_number
     return min(15 * (2 ** min(attempt - 1, 3)), 120)
+
+
+def _before_sleep_429(retry_state):
+    """Log a clear message when backing off on 429."""
+    wait = _wait_429(retry_state)
+    attempt = retry_state.attempt_number
+    logger.warning(
+        "Gemini rate limit (429). Retrying in %.0fs (attempt %d/8). "
+        "If this persists, wait a few minutes or use an API key with higher quota.",
+        wait,
+        attempt,
+    )
 
 
 def _strip_fences(raw: str) -> str:
@@ -87,8 +99,8 @@ def _parse_json_array(raw: str) -> list[dict]:
         return []
 
 
-# Minimum seconds between any two Gemini API calls to stay under free-tier RPM.
-_GEMINI_CALL_INTERVAL_SEC = 3.0
+# Minimum seconds between any two Gemini API calls to reduce 429s on free tier.
+_GEMINI_CALL_INTERVAL_SEC = 5.0
 
 
 class GeminiProvider(LLMProvider):
@@ -110,7 +122,7 @@ class GeminiProvider(LLMProvider):
         retry=retry_if_exception(_is_429),
         stop=stop_after_attempt(8),
         wait=_wait_429,
-        before_sleep=before_sleep_log(logger, logging.WARNING),
+        before_sleep=_before_sleep_429,
         reraise=True,
     )
     async def _generate(self, prompt: str) -> str:

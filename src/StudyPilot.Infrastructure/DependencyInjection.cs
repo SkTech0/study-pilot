@@ -60,15 +60,16 @@ public static class DependencyInjection
             var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AIServiceOptions>>().Value;
             client.BaseAddress = new Uri(opts.BaseUrl.TrimEnd('/') + "/");
             var timeoutSeconds = opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 60;
-            client.Timeout = TimeSpan.FromSeconds(Math.Max(timeoutSeconds, 120)); // at least 120s for quiz/start
+            // Quiz generation can take 2–5+ min with many concepts or slow LLM; use at least 300s to avoid TimeoutRejectedException.
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(timeoutSeconds, 300));
         }).AddStandardResilienceHandler(options =>
         {
-            // Default AttemptTimeout is 30s; quiz generation can take 60–120s. Use 120s so AI has time to respond.
-            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(120);
-            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
+            // Quiz generation can take several minutes; use 5 min so AI has time to respond.
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(300);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(300);
             options.CircuitBreaker.ShouldHandle = _ => new ValueTask<bool>(false);
-            // Sampling duration must be at least 2× AttemptTimeout for validation (120s × 2 = 240s).
-            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(240);
+            // Sampling duration must be at least 2× AttemptTimeout for validation (300s × 2 = 600s).
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(600);
             options.CircuitBreaker.FailureRatio = 0.5;
             options.CircuitBreaker.MinimumThroughput = 3;
             options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(10);

@@ -4,6 +4,7 @@ public sealed class AIServiceOptions
 {
     public const string SectionName = "AIService";
     public string BaseUrl { get; set; } = "http://study-pilot-ai:8000";
-    public int TimeoutSeconds { get; set; } = 60;
+    /// <summary>HTTP timeout for AI service calls. Quiz generation uses at least 300s internally.</summary>
+    public int TimeoutSeconds { get; set; } = 300;
     public int MaxTextLength { get; set; } = 50_000;
 }
