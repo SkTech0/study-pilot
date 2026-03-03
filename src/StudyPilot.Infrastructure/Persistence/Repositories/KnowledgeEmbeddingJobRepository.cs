@@ -6,11 +6,12 @@ namespace StudyPilot.Infrastructure.Persistence.Repositories;
 public interface IKnowledgeEmbeddingJobRepository
 {
     Task AddAsync(Persistence.KnowledgeEmbeddingJob job, CancellationToken cancellationToken = default);
-    Task<Persistence.KnowledgeEmbeddingJob?> TryClaimNextAsync(string workerId, TimeSpan processingTimeout, int maxRetries, CancellationToken cancellationToken = default);
+    Task<Persistence.KnowledgeEmbeddingJob?> TryClaimNextAsync(string workerId, TimeSpan processingTimeout, int maxRetries, bool allowLowPriority, CancellationToken cancellationToken = default);
     Task MarkCompletedAsync(Guid jobId, CancellationToken cancellationToken = default);
     Task MarkFailedAsync(Guid jobId, string? errorMessage, bool allowRetry, DateTime? nextRetryAtUtc, CancellationToken cancellationToken = default);
     Task ReleaseStuckJobsAsync(TimeSpan processingTimeout, CancellationToken cancellationToken = default);
     Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<int>> GetPendingCountByPriorityAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class KnowledgeEmbeddingJobRepository : IKnowledgeEmbeddingJobRepository
@@ -25,7 +26,7 @@ public sealed class KnowledgeEmbeddingJobRepository : IKnowledgeEmbeddingJobRepo
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<Persistence.KnowledgeEmbeddingJob?> TryClaimNextAsync(string workerId, TimeSpan processingTimeout, int maxRetries, CancellationToken cancellationToken = default)
+    public async Task<Persistence.KnowledgeEmbeddingJob?> TryClaimNextAsync(string workerId, TimeSpan processingTimeout, int maxRetries, bool allowLowPriority, CancellationToken cancellationToken = default)
     {
         var strategy = _db.Database.CreateExecutionStrategy();
 
@@ -34,19 +35,21 @@ public sealed class KnowledgeEmbeddingJobRepository : IKnowledgeEmbeddingJobRepo
             var cutoff = DateTime.UtcNow.Add(-processingTimeout);
             var now = DateTime.UtcNow;
             Guid claimedId = default;
+            var lowFilter = allowLowPriority ? "" : " AND \"Priority\" < 3";
 
             await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
             try
             {
-                var ids = await _db.Database
-                    .SqlQueryRaw<Guid>(@"
+                var sql = $@"
 SELECT ""Id"" FROM ""KnowledgeEmbeddingJobs""
-WHERE (""Status"" = 'Pending' OR (""Status"" = 'Processing' AND ""ClaimedAtUtc"" < {0}))
-AND (""NextRetryAtUtc"" IS NULL OR ""NextRetryAtUtc"" <= {1})
-AND ""RetryCount"" < {2}
-ORDER BY ""CreatedAtUtc""
+WHERE (""Status"" = 'Pending' OR (""Status"" = 'Processing' AND ""ClaimedAtUtc"" < {{0}}))
+AND (""NextRetryAtUtc"" IS NULL OR ""NextRetryAtUtc"" <= {{1}})
+AND ""RetryCount"" < {{2}}{lowFilter}
+ORDER BY ""Priority"", ""CreatedAtUtc""
 LIMIT 1
-FOR UPDATE SKIP LOCKED", cutoff, now, maxRetries)
+FOR UPDATE SKIP LOCKED";
+                var ids = await _db.Database
+                    .SqlQueryRaw<Guid>(sql, cutoff, now, maxRetries)
                     .ToListAsync(cancellationToken);
 
                 if (ids.Count == 0)
@@ -121,5 +124,21 @@ WHERE ""Id"" = {3}", new object[] { status, err, nextRetryAtUtc ?? (object)DBNul
 
     public async Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default) =>
         await _db.KnowledgeEmbeddingJobs.CountAsync(j => j.Status == "Pending" || j.Status == "Processing", cancellationToken);
+
+    public async Task<IReadOnlyList<int>> GetPendingCountByPriorityAsync(CancellationToken cancellationToken = default)
+    {
+        var counts = await _db.KnowledgeEmbeddingJobs
+            .Where(j => j.Status == "Pending" || j.Status == "Processing")
+            .GroupBy(j => j.Priority)
+            .Select(g => new { Priority = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        var dict = counts.ToDictionary(x => x.Priority, x => x.Count);
+        return [
+            dict.GetValueOrDefault(0, 0),
+            dict.GetValueOrDefault(1, 0),
+            dict.GetValueOrDefault(2, 0),
+            dict.GetValueOrDefault(3, 0)
+        ];
+    }
 }
 

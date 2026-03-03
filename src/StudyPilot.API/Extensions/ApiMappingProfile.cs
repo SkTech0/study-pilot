@@ -34,7 +34,7 @@ public sealed class ApiMappingProfile : Profile
         CreateMap<UploadDocumentResult, UploadDocumentResponse>()
             .ForMember(d => d.Status, o => o.MapFrom(_ => "processing"));
         CreateMap<DocumentListItem, DocumentResponse>()
-            .ConstructUsing(s => new DocumentResponse(s.Id, s.FileName, s.Status, s.CreatedAtUtc, s.FailureReason));
+            .ConstructUsing(s => new DocumentResponse(s.Id, s.FileName, s.Status, s.CreatedAtUtc, s.FailureReason, s.KnowledgeStatus));
         CreateMap<StartQuizRequest, StartQuizCommand>().ForMember(c => c.UserId, o => o.Ignore());
         CreateMap<StartQuizQuestionSummary, QuizQuestionResponse>();
         CreateMap<StartQuizResult, StartQuizResponse>();

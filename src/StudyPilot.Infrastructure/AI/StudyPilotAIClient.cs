@@ -12,7 +12,7 @@ public sealed class StudyPilotAIClient : IStudyPilotAIClient
 {
     private const string ServiceVersion = "v1";
     private const int HealthDegradedThresholdMs = 3000;
-    private const int DefaultLlmTimeoutSeconds = 30;
+    private const int DefaultLlmTimeoutSeconds = 90;
 
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _jsonOptions;

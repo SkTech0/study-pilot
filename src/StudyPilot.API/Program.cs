@@ -3,12 +3,15 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Serilog;
 using StudyPilot.API.Extensions;
 using StudyPilot.API.Middleware;
 using StudyPilot.API.Services;
 using StudyPilot.Infrastructure;
 using StudyPilot.Infrastructure.BackgroundJobs;
+using StudyPilot.Infrastructure.Persistence.DbContext;
 using StudyPilot.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -91,6 +94,28 @@ builder.Services.AddRateLimiter(options =>
 StartupConfigurationValidator.Validate(builder.Configuration);
 
 var app = builder.Build();
+
+// Run migrations before any hosted services (workers) start, so the schema exists when they hit the DB.
+try
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<StudyPilotDbContext>();
+        await db.Database.MigrateAsync();
+    }
+}
+catch (PostgresException pgEx) when (pgEx.SqlState == "42501")
+{
+    var fix = "Run as superuser: psql -U postgres -d StudyPilot -f scripts/postgres-grant-public.sql (see Prompts/RUN.md).";
+    Log.Fatal("Database migration failed: permission denied. {Fix}", fix);
+    throw new InvalidOperationException("Permission denied for schema public. PostgreSQL 15+ requires explicit grants and the vector extension. " + fix, pgEx);
+}
+catch (PostgresException pgEx) when (pgEx.SqlState == "42704" && (pgEx.MessageText?.Contains("vector") == true))
+{
+    var fix = "The pgvector extension is not installed. Run as superuser: psql -U postgres -d StudyPilot -f scripts/postgres-grant-public.sql";
+    Log.Fatal("Database migration failed: type \"vector\" does not exist. {Fix}", fix);
+    throw new InvalidOperationException("The vector type does not exist. Create the pgvector extension first. " + fix, pgEx);
+}
 
 StudyPilotMetrics.SetQueueLengthProvider(() => app.Services.GetRequiredService<IBackgroundQueueMetrics>().QueuedCount);
 StudyPilotMetrics.SetQuizQueueLengthProvider(() => app.Services.GetRequiredService<DbBackedQuizQuestionGenerationJobQueue>().CachedPendingCount);

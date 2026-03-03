@@ -124,6 +124,10 @@ namespace StudyPilot.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AIEnrichmentStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -135,6 +139,11 @@ namespace StudyPilot.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<string>("KnowledgeStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("ProcessingStatus")
                         .IsRequired()
@@ -153,6 +162,8 @@ namespace StudyPilot.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("KnowledgeStatus");
 
                     b.HasIndex("ProcessingStatus");
 
@@ -173,15 +184,28 @@ namespace StudyPilot.Infrastructure.Migrations
                         .HasMaxLength(8000)
                         .HasColumnType("character varying(8000)");
 
+                    b.Property<int>("ChunkingVersion")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("DocumentId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime>("EmbeddedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Vector>("Embedding")
                         .IsRequired()
                         .HasColumnType("vector(1536)");
+
+                    b.Property<string>("EmbeddingModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("EmbeddingVersion")
+                        .HasColumnType("integer");
 
                     b.Property<int>("TokenCount")
                         .HasColumnType("integer");
@@ -775,6 +799,9 @@ namespace StudyPilot.Infrastructure.Migrations
                     b.Property<DateTime?>("NextRetryAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
                     b.Property<int>("RetryCount")
                         .HasColumnType("integer");
 
@@ -795,7 +822,211 @@ namespace StudyPilot.Infrastructure.Migrations
 
                     b.HasIndex("Status", "NextRetryAtUtc");
 
+                    b.HasIndex("Status", "Priority", "CreatedAtUtc");
+
                     b.ToTable("KnowledgeEmbeddingJobs", (string)null);
+                });
+
+            modelBuilder.Entity("StudyPilot.Infrastructure.Persistence.KnowledgeOutboxEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AggregateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("NextAttemptUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AggregateId");
+
+                    b.HasIndex("Status", "NextAttemptUtc");
+
+                    b.ToTable("KnowledgeOutbox", (string)null);
+                });
+
+            modelBuilder.Entity("StudyPilot.Infrastructure.Persistence.KnowledgePipelineHeartbeat", b =>
+                {
+                    b.Property<string>("InstanceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("AILimiterWaiters")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CurrentMode")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EmbeddingDepth")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("LastSeenUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("OutboxPending")
+                        .HasColumnType("integer");
+
+                    b.HasKey("InstanceId");
+
+                    b.ToTable("KnowledgePipelineHeartbeats", (string)null);
+                });
+
+            modelBuilder.Entity("StudyPilot.Infrastructure.Persistence.KnowledgeTokenUsage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("EstimatedTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("TimestampUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TimestampUtc");
+
+                    b.ToTable("KnowledgeTokenUsage", (string)null);
+                });
+
+            modelBuilder.Entity("StudyPilot.Infrastructure.Persistence.OptimizationConfig", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ChunkSizeTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EmbeddingBatchSize")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("LastUpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MaxAIConcurrency")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RetryBaseDelaySeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VectorTopK")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("OptimizationConfigs", (string)null);
+                });
+
+            modelBuilder.Entity("StudyPilot.Infrastructure.Persistence.OptimizationConfigHistory", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("AppliedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ChunkSizeTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EmbeddingBatchSize")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MaxAIConcurrency")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RetryBaseDelaySeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VectorTopK")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppliedAtUtc");
+
+                    b.ToTable("OptimizationConfigHistory", (string)null);
+                });
+
+            modelBuilder.Entity("StudyPilot.Infrastructure.Persistence.OptimizationSnapshot", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AILimiterWaiters")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("AvgChatLatencyMs")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("EmbeddingLatencyMs")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("P95ChatLatencyMs")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("QueueDepth")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("RetrievalHitRate")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("RetryRate")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("SuccessRate")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("TokenUsagePerMinute")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CapturedAtUtc");
+
+                    b.ToTable("OptimizationSnapshots", (string)null);
                 });
 
             modelBuilder.Entity("StudyPilot.Infrastructure.Persistence.QuestionConceptLink", b =>

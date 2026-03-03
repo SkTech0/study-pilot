@@ -18,8 +18,10 @@ public sealed class KnowledgeEmbeddingJobConfiguration : IEntityTypeConfiguratio
         builder.Property(j => j.CreatedAtUtc).HasConversion(static v => v, static v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
         builder.Property(j => j.ClaimedAtUtc).HasConversion(static v => v, static v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : (DateTime?)null);
         builder.Property(j => j.NextRetryAtUtc).HasConversion(static v => v, static v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : (DateTime?)null);
+        builder.Property(j => j.Priority);
 
         builder.HasIndex(j => j.Status);
+        builder.HasIndex(j => new { j.Status, j.Priority, j.CreatedAtUtc });
         builder.HasIndex(j => new { j.Status, j.NextRetryAtUtc });
         builder.HasIndex(j => new { j.Status, j.CreatedAtUtc });
 

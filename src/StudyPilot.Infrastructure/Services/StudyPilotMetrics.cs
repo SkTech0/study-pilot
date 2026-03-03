@@ -6,7 +6,7 @@ public static class StudyPilotMetrics
 {
     public const string MeterName = "StudyPilot";
 
-    private static readonly Meter Meter = new(MeterName);
+    public static readonly Meter Meter = new(MeterName);
     public static readonly Counter<long> DocumentsProcessedTotal = Meter.CreateCounter<long>("documents_processed_total");
     public static readonly Histogram<double> AIRequestDurationMs = Meter.CreateHistogram<double>("ai_request_duration_ms");
 
@@ -29,6 +29,19 @@ public static class StudyPilotMetrics
     public static readonly Counter<long> TokensGenerated = Meter.CreateCounter<long>("tokens_generated");
     public static readonly Counter<long> ProviderUsed = Meter.CreateCounter<long>("provider_used");
     public static readonly Counter<long> FallbackCount = Meter.CreateCounter<long>("fallback_count");
+
+    // Knowledge pipeline reliability
+    public static readonly Counter<long> OutboxDispatchSuccess = Meter.CreateCounter<long>("knowledge_outbox_dispatch_success");
+    public static readonly Counter<long> KnowledgeRecoveryActions = Meter.CreateCounter<long>("knowledge_recovery_actions");
+    public static readonly Histogram<double> KnowledgePipelineStageDuration = Meter.CreateHistogram<double>("knowledge_pipeline_stage_duration", "ms");
+    public static readonly Counter<long> KnowledgeOutboxRetryTotal = Meter.CreateCounter<long>("knowledge_outbox_retry_total");
+    public static readonly Counter<long> KnowledgeRecoveryRepairsTotal = Meter.CreateCounter<long>("knowledge_recovery_repairs_total");
+    public static readonly Histogram<double> KnowledgeEmbeddingLatency = Meter.CreateHistogram<double>("knowledge_embedding_latency", "ms");
+    public static readonly ObservableGauge<int> KnowledgeStaleDocuments = Meter.CreateObservableGauge("knowledge_stale_documents", () => GetStaleDocumentsCount());
+
+    private static Func<int>? _staleDocumentsCountProvider;
+    public static void SetStaleDocumentsCountProvider(Func<int> provider) => _staleDocumentsCountProvider = provider;
+    private static int GetStaleDocumentsCount() => _staleDocumentsCountProvider?.Invoke() ?? 0;
 
     // Phase 3: AI intelligence
     public static readonly Counter<long> MasteryUpdates = Meter.CreateCounter<long>("mastery_updates");
@@ -55,4 +68,25 @@ public static class StudyPilotMetrics
     private static int GetQueueLength() => _queueLengthProvider?.Invoke() ?? 0;
     private static int GetQuizQueueLength() => _quizQueueLengthProvider?.Invoke() ?? 0;
     private static int GetEmbeddingQueueLength() => _embeddingQueueLengthProvider?.Invoke() ?? 0;
+
+    // Phase 6: Autonomous optimization observability
+    public static readonly Counter<long> OptimizationAdjustmentsTotal = Meter.CreateCounter<long>("optimization_adjustments_total");
+    public static readonly Counter<long> OptimizationRollbacksTotal = Meter.CreateCounter<long>("optimization_rollbacks_total");
+    public static readonly ObservableGauge<int> OptimizationCurrentVectorTopK = Meter.CreateObservableGauge("optimization_current_vector_topk", () => GetOptimizationVectorTopK());
+    public static readonly ObservableGauge<int> OptimizationCurrentChunkSize = Meter.CreateObservableGauge("optimization_current_chunk_size", () => GetOptimizationChunkSize());
+    public static readonly ObservableGauge<int> OptimizationCurrentConcurrency = Meter.CreateObservableGauge("optimization_current_concurrency", () => GetOptimizationConcurrency());
+    public static readonly ObservableGauge<int> OptimizationFreezeState = Meter.CreateObservableGauge("optimization_freeze_state", () => GetOptimizationFreezeState());
+
+    private static Func<int>? _optimizationVectorTopKProvider;
+    private static Func<int>? _optimizationChunkSizeProvider;
+    private static Func<int>? _optimizationConcurrencyProvider;
+    private static Func<int>? _optimizationFreezeStateProvider;
+    public static void SetOptimizationVectorTopKProvider(Func<int> p) => _optimizationVectorTopKProvider = p;
+    public static void SetOptimizationChunkSizeProvider(Func<int> p) => _optimizationChunkSizeProvider = p;
+    public static void SetOptimizationConcurrencyProvider(Func<int> p) => _optimizationConcurrencyProvider = p;
+    public static void SetOptimizationFreezeStateProvider(Func<int> p) => _optimizationFreezeStateProvider = p;
+    private static int GetOptimizationVectorTopK() => _optimizationVectorTopKProvider?.Invoke() ?? 24;
+    private static int GetOptimizationChunkSize() => _optimizationChunkSizeProvider?.Invoke() ?? 800;
+    private static int GetOptimizationConcurrency() => _optimizationConcurrencyProvider?.Invoke() ?? 4;
+    private static int GetOptimizationFreezeState() => _optimizationFreezeStateProvider?.Invoke() ?? 0;
 }

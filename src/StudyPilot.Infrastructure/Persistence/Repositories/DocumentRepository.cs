@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using StudyPilot.Application.Abstractions.Knowledge;
 using StudyPilot.Application.Abstractions.Persistence;
 using StudyPilot.Domain.Entities;
 using StudyPilot.Domain.Enums;
@@ -11,8 +12,13 @@ namespace StudyPilot.Infrastructure.Persistence.Repositories;
 public sealed class DocumentRepository : IDocumentRepository
 {
     private readonly StudyPilotDbContext _db;
+    private readonly IKnowledgeStateMachine _stateMachine;
 
-    public DocumentRepository(StudyPilotDbContext db) => _db = db;
+    public DocumentRepository(StudyPilotDbContext db, IKnowledgeStateMachine stateMachine)
+    {
+        _db = db;
+        _stateMachine = stateMachine;
+    }
 
     public async Task<Document?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         await _db.Documents
@@ -40,13 +46,17 @@ public sealed class DocumentRepository : IDocumentRepository
         var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
         if (conn.State != ConnectionState.Open)
             await conn.OpenAsync(cancellationToken);
-        const string sql = @"UPDATE ""Documents"" SET ""ProcessingStatus"" = 'Processing' WHERE ""Id"" = @id AND ""ProcessingStatus"" = 'Pending' RETURNING ""Id"", ""UserId"", ""FileName"", ""StoragePath"", ""ProcessingStatus"", ""CreatedAtUtc"", ""UpdatedAtUtc"", ""FailureReason""";
+        const string sql = @"UPDATE ""Documents"" SET ""ProcessingStatus"" = 'Processing' WHERE ""Id"" = @id AND ""ProcessingStatus"" = 'Pending' RETURNING ""Id"", ""UserId"", ""FileName"", ""StoragePath"", ""ProcessingStatus"", ""CreatedAtUtc"", ""UpdatedAtUtc"", ""FailureReason"", ""KnowledgeStatus"", ""AIEnrichmentStatus""";
         await using var cmd = new NpgsqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("id", documentId);
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
         var statusStr = reader.GetString(4);
         var status = Enum.Parse<ProcessingStatus>(statusStr);
+        var knowledgeStr = reader.IsDBNull(8) ? "None" : reader.GetString(8);
+        var knowledgeStatus = Enum.Parse<KnowledgeStatus>(knowledgeStr);
+        var aiStr = reader.IsDBNull(9) ? null : reader.GetString(9);
+        var aiStatus = string.IsNullOrEmpty(aiStr) ? (AIEnrichmentStatus?)null : Enum.Parse<AIEnrichmentStatus>(aiStr);
         return new Document(
             reader.GetGuid(0),
             reader.GetGuid(1),
@@ -55,16 +65,18 @@ public sealed class DocumentRepository : IDocumentRepository
             status,
             reader.GetDateTime(5),
             reader.GetDateTime(6),
-            reader.IsDBNull(7) ? null : reader.GetString(7));
+            reader.IsDBNull(7) ? null : reader.GetString(7),
+            knowledgeStatus,
+            aiStatus);
     }
 
     public async Task ResetToPendingAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        await _db.Documents
-            .Where(d => d.Id == documentId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(d => d.ProcessingStatus, ProcessingStatus.Pending)
-                .SetProperty(d => d.FailureReason, (string?)null), cancellationToken);
+        var doc = await GetByIdAsync(documentId, cancellationToken).ConfigureAwait(false);
+        if (doc is null) return;
+        _stateMachine.TransitionToPending(doc);
+        _db.Documents.Update(doc);
+        await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<Guid>> GetStuckProcessingDocumentIdsAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default) =>
@@ -74,12 +86,32 @@ public sealed class DocumentRepository : IDocumentRepository
             .Select(d => d.Id)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Guid>> GetFailedDocumentIdsAsync(CancellationToken cancellationToken = default) =>
+        await _db.Documents
+            .AsNoTracking()
+            .Where(d => d.ProcessingStatus == ProcessingStatus.Failed)
+            .Select(d => d.Id)
+            .ToListAsync(cancellationToken);
+
     public async Task<int> ResetFailedDocumentsToPendingAsync(CancellationToken cancellationToken = default)
     {
-        return await _db.Documents
-            .Where(d => d.ProcessingStatus == ProcessingStatus.Failed)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(d => d.ProcessingStatus, ProcessingStatus.Pending)
-                .SetProperty(d => d.FailureReason, (string?)null), cancellationToken);
+        var ids = await GetFailedDocumentIdsAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var id in ids)
+        {
+            var doc = await GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+            if (doc is null) continue;
+            try
+            {
+                _stateMachine.TransitionToPending(doc);
+                _db.Documents.Update(doc);
+            }
+            catch
+            {
+                // Invalid transition for this document; skip
+            }
+        }
+        if (ids.Count > 0)
+            await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return ids.Count;
     }
 }

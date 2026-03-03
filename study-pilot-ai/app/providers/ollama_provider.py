@@ -18,14 +18,14 @@ logger = logging.getLogger(__name__)
 
 
 class OllamaProvider(LLMProvider):
-    """Local Ollama API provider. No API key; uses OLLAMA_BASE_URL and OLLAMA_MODEL (e.g. llama3:8b)."""
+    """Local Ollama API provider. No API key; uses OLLAMA_BASE_URL and OLLAMA_MODEL (e.g. llama3.2)."""
 
     supports_json_mode: bool = True
 
     def __init__(self, settings: Settings):
         base = (settings.ollama_base_url or "").strip() or "http://localhost:11434"
         self._base_url = base.rstrip("/")
-        self._model = settings.ollama_model or "llama3:8b"
+        self._model = settings.ollama_model or "llama3.2"
         # Use Ollama-specific timeout if set (local models often need >60s for long prompts)
         timeout = getattr(settings, "llm_timeout_seconds", None) or getattr(settings, "ollama_request_timeout", None)
         self._timeout = (

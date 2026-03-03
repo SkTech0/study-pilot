@@ -57,16 +57,22 @@ WHERE datname = 'StudyPilot'
   AND pid <> pg_backend_pid();
 
   DROP DATABASE "StudyPilot";
+  # As postgres (or your superuser)
+psql -U postgres -c 'DROP DATABASE IF EXISTS "StudyPilot";'
+psql -U postgres -c 'CREATE DATABASE "StudyPilot";'
+psql -U postgres -d StudyPilot -f scripts/postgres-grant-public.sql
 Install and start PostgreSQL, then create the DB and user. **PostgreSQL 15+** no longer grants create on `public` by default, so grant schema permissions too:
 
 ```sql
 CREATE DATABASE "StudyPilot";
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE USER studypilot WITH PASSWORD 'postgres';
-GRANT ALL PRIVILEGES ON DATABASE "StudyPilot" TO studypilot;
+GRANT USAGE ON SCHEMA public TO studypilot;
+GRANT CREATE ON SCHEMA public TO studypilot;
 
 -- Required on PostgreSQL 15+: allow app user to run migrations (create tables in public)
 \c "StudyPilot"
+GRANT ALL PRIVILEGES ON DATABASE "StudyPilot" TO studypilot;
 GRANT USAGE ON SCHEMA public TO studypilot;
 GRANT CREATE ON SCHEMA public TO studypilot;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO studypilot;
@@ -132,6 +138,8 @@ dotnet run
 Uses `appsettings.Development.json` (DB: localhost, AI: http://localhost:8000).  
 API: http://localhost:5024 (from launchSettings).
 
+**Clean terminal (request-only):** In Development, console logging is reduced so the dotnet terminal shows mainly **HTTP requests** (e.g. `Request POST /documents/upload completed with 200 in 118ms`). EF Core, worker polls, and other verbose logs are at Warning and do not appear. Full logs remain in `logs/study-pilot-*.log`.
+
 ### 4. Frontend (Angular)
 
 ```bash
@@ -194,7 +202,11 @@ These were the causes and fixes so that the Python AI service (e.g. `POST /extra
    Even with the correct claim order, the worker might not run in time (poll interval, one job per poll, or worker not running). So in E2E the document often stayed **Pending** and the script timed out.  
    **Fix:** In **Development** (`ASPNETCORE_ENVIRONMENT=Development`), upload runs document processing **synchronously** (inline) after enqueue, so the document is completed before the upload response and Python is called during the request. E2E then sees “Document Completed” and continues; tutor/quiz/learning steps run as intended.
 
-4. **Tutor response validation (Python)**  
+4. **Document upload → Ready: where time goes (from logs)**  
+   From recent logs, the flow is: **Upload** (~120–150 ms) → **Background job** (claim within ~1–2 s) → **Extraction** (~600–900 ms) → **extract-concepts** LLM call (**~11–12.5 s**) → persistence → outbox → **embedding job** (chunking + **POST /embeddings** batches) → document **Ready**.  
+   So the main delay before Ready is the **extract-concepts** call (~11–12 s) and then embedding (chunking + batch embeddings). If you see **DocumentProcessingPersistenceFailed** with `InvalidDocumentStateTransitionException` (e.g. `Knowledge None->PendingEmbedding`), the document never reaches embedding and never becomes Ready; that is a state-machine/transition bug to fix in the pipeline.
+
+5. **Tutor response validation (Python)**  
    `POST /tutor/respond` could return 500 because the response model required **`nextStep`** and the mock (or parser) sometimes omitted it.  
    **Fix:** `TutorResponseOut.next_step` was given a default (`"Complete"`) and the route always passes a fallback, so the response validates and the E2E tutor step succeeds.
 

@@ -18,10 +18,13 @@ public sealed class DocumentConfiguration : IEntityTypeConfiguration<Document>
         builder.Property(d => d.FileName).HasMaxLength(500);
         builder.Property(d => d.StoragePath).HasMaxLength(2000);
         builder.Property(d => d.ProcessingStatus).HasConversion<string>().HasMaxLength(50);
+        builder.Property(d => d.KnowledgeStatus).HasConversion<string>().HasMaxLength(50);
+        builder.Property(d => d.AIEnrichmentStatus).HasConversion<string?>().HasMaxLength(50);
         builder.Property(d => d.FailureReason).HasMaxLength(500).IsRequired(false);
 
         builder.HasIndex(d => d.UserId);
         builder.HasIndex(d => d.ProcessingStatus);
+        builder.HasIndex(d => d.KnowledgeStatus);
         builder.HasIndex(d => new { d.UserId, d.CreatedAtUtc });
     }
 }

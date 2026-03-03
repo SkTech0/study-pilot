@@ -11,16 +11,18 @@ namespace StudyPilot.Infrastructure.Knowledge;
 public sealed class PgVectorSearchService : IVectorSearchService
 {
     private const string SqlWithDoc = @"
-SELECT ""Id"" AS ""ChunkId"", ""DocumentId"", ""ChunkText"" AS ""Text"", ""TokenCount"", (""Embedding"" <=> @q) AS ""Score""
-FROM ""DocumentChunks""
-WHERE ""UserId"" = @userId AND ""DocumentId"" = @documentId
-ORDER BY ""Embedding"" <=> @q
+SELECT c.""Id"" AS ""ChunkId"", c.""DocumentId"", c.""ChunkText"" AS ""Text"", c.""TokenCount"", (c.""Embedding"" <=> @q) AS ""Score""
+FROM ""DocumentChunks"" c
+INNER JOIN ""Documents"" d ON d.""Id"" = c.""DocumentId""
+WHERE c.""UserId"" = @userId AND c.""DocumentId"" = @documentId AND d.""KnowledgeStatus"" = 'Ready'
+ORDER BY c.""Embedding"" <=> @q
 LIMIT @k";
     private const string SqlGlobal = @"
-SELECT ""Id"" AS ""ChunkId"", ""DocumentId"", ""ChunkText"" AS ""Text"", ""TokenCount"", (""Embedding"" <=> @q) AS ""Score""
-FROM ""DocumentChunks""
-WHERE ""UserId"" = @userId
-ORDER BY ""Embedding"" <=> @q
+SELECT c.""Id"" AS ""ChunkId"", c.""DocumentId"", c.""ChunkText"" AS ""Text"", c.""TokenCount"", (c.""Embedding"" <=> @q) AS ""Score""
+FROM ""DocumentChunks"" c
+INNER JOIN ""Documents"" d ON d.""Id"" = c.""DocumentId""
+WHERE c.""UserId"" = @userId AND d.""KnowledgeStatus"" = 'Ready'
+ORDER BY c.""Embedding"" <=> @q
 LIMIT @k";
 
     private readonly StudyPilotDbContext _db;

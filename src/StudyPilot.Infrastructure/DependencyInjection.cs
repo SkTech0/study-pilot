@@ -31,6 +31,8 @@ using StudyPilot.Infrastructure.Persistence.Repositories;
 using StudyPilot.Infrastructure.Tutor;
 using StudyPilot.Infrastructure.Storage;
 using StudyPilot.Infrastructure.Knowledge;
+using StudyPilot.Application.Abstractions.Optimization;
+using StudyPilot.Infrastructure.Optimization;
 using StudyPilot.Infrastructure.Resilience;
 
 namespace StudyPilot.Infrastructure;
@@ -81,12 +83,9 @@ public static class DependencyInjection
 
         services.Configure<AIServiceOptions>(config.GetSection(AIServiceOptions.SectionName));
         services.Configure<ChaosSimulationOptions>(config.GetSection(ChaosSimulationOptions.SectionName));
-        services.AddSingleton(sp =>
-        {
-            var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AIServiceOptions>>().Value;
-            return new SemaphoreSlim(Math.Max(1, opts.MaxConcurrentRequests));
-        });
+        services.AddSingleton<IAIExecutionLimiter, AIExecutionLimiter>();
         services.AddTransient<AiConcurrencyHandler>();
+        services.AddScoped<IKnowledgeStateMachine, KnowledgeStateMachine>();
         services.AddHttpClient<IStudyPilotAIClient, StudyPilotAIClient>((sp, client) =>
         {
             var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AIServiceOptions>>().Value;
@@ -143,9 +142,24 @@ public static class DependencyInjection
         services.AddSingleton<IFileContentReader, LocalFileContentReader>();
 
         services.Configure<BackgroundJobOptions>(config.GetSection(BackgroundJobOptions.SectionName));
+        services.Configure<PipelineLoadOptions>(config.GetSection(PipelineLoadOptions.SectionName));
+        services.AddSingleton<IKnowledgePipelineCoordinator, KnowledgePipelineCoordinator>();
+        services.AddSingleton<IAIFailureClassifier, AIFailureClassifier>();
         services.AddScoped<IBackgroundJobRepository, BackgroundJobRepository>();
         services.AddScoped<IRetryFailedDocumentProcessing, RetryFailedDocumentProcessingService>();
         services.AddScoped<IKnowledgeEmbeddingJobRepository, KnowledgeEmbeddingJobRepository>();
+        services.AddScoped<IKnowledgeOutboxRepository, KnowledgeOutboxRepository>();
+        services.AddScoped<IKnowledgePipelineHeartbeatRepository, KnowledgePipelineHeartbeatRepository>();
+        services.AddScoped<IKnowledgeTokenUsageRepository, KnowledgeTokenUsageRepository>();
+        services.AddScoped<IOptimizationSnapshotRepository, OptimizationSnapshotRepository>();
+        services.AddScoped<IOptimizationConfigRepository, OptimizationConfigRepository>();
+        services.AddSingleton<IOptimizationConfigProvider, DatabaseOptimizationConfigProvider>();
+        services.AddSingleton<IOptimizationSafetyGuard, OptimizationSafetyGuard>();
+        services.AddSingleton<OptimizationMetricsBuffer>();
+        services.AddScoped<IAutonomousOptimizer, AutonomousOptimizer>();
+        services.AddHostedService<OptimizationMetricsCollector>();
+        services.AddHostedService<AutonomousOptimizerHost>();
+        services.AddHostedService<KnowledgePipelineHeartbeatService>();
         services.AddSingleton<DbBackedBackgroundJobQueue>();
         services.AddSingleton<IBackgroundJobQueue>(sp => sp.GetRequiredService<DbBackedBackgroundJobQueue>());
         services.AddSingleton<IBackgroundQueueMetrics>(sp => sp.GetRequiredService<DbBackedBackgroundJobQueue>());
@@ -160,6 +174,8 @@ public static class DependencyInjection
         services.AddSingleton<IKnowledgeEmbeddingJobQueue>(sp => sp.GetRequiredService<DbBackedKnowledgeEmbeddingJobQueue>());
         services.AddSingleton<IKnowledgeEmbeddingJobFactory, KnowledgeEmbeddingJobFactory>();
         services.AddHostedService<KnowledgeEmbeddingJobWorker>();
+        services.AddHostedService<KnowledgeOutboxDispatcher>();
+        services.AddHostedService<KnowledgeRecoveryWorker>();
         services.AddHostedService<DatabaseMigrationHostedService>();
         services.AddHostedService<DatabaseStartupCheck>();
         services.AddHostedService<AIStartupCheck>();

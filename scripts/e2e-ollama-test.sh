@@ -3,7 +3,7 @@
 #
 # Prerequisites:
 # - Ollama running: ollama serve (or already running)
-# - A model pulled: ollama pull llama3:8b  (or use a smaller one for speed: ollama pull llama3.2:3b)
+# - A model pulled: ollama pull llama3.2  (or use a smaller one for speed: ollama pull llama3.2:3b)
 # - Python AI at http://localhost:8000 with LLM_FALLBACK_CHAIN=ollama (e.g. in study-pilot-ai/.env)
 # - .NET API at http://localhost:5024
 # - PostgreSQL with StudyPilot DB and migrations applied

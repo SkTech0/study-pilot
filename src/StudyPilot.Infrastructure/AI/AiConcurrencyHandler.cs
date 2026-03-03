@@ -1,26 +1,29 @@
-using System.Net;
+using StudyPilot.Application.Abstractions.AI;
 
 namespace StudyPilot.Infrastructure.AI;
 
 internal sealed class AiConcurrencyHandler : DelegatingHandler
 {
-    private readonly SemaphoreSlim _semaphore;
+    private readonly IAIExecutionLimiter _limiter;
 
-    public AiConcurrencyHandler(SemaphoreSlim aiConcurrencySemaphore)
+    public AiConcurrencyHandler(IAIExecutionLimiter limiter)
     {
-        _semaphore = aiConcurrencySemaphore;
+        _limiter = limiter;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        await _semaphore.WaitAsync(cancellationToken);
+        await _limiter.WaitForCapacityAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await base.SendAsync(request, cancellationToken);
+            var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (response.IsSuccessStatusCode)
+                _limiter.NotifySuccess();
+            return response;
         }
         finally
         {
-            _semaphore.Release();
+            _limiter.Release();
         }
     }
 }

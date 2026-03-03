@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using StudyPilot.Application.Abstractions.BackgroundJobs;
+using StudyPilot.Application.Abstractions.Knowledge;
 using StudyPilot.Infrastructure.Persistence;
 using StudyPilot.Infrastructure.Persistence.Repositories;
 
@@ -18,7 +19,7 @@ public sealed class DbBackedKnowledgeEmbeddingJobQueue : IKnowledgeEmbeddingJobQ
 
     public DbBackedKnowledgeEmbeddingJobQueue(IServiceProvider services) => _services = services;
 
-    public async Task EnqueueCreateEmbeddingsAsync(Guid documentId, string? correlationId, CancellationToken cancellationToken = default)
+    public async Task EnqueueCreateEmbeddingsAsync(Guid documentId, string? correlationId, PipelinePriority priority = PipelinePriority.High, CancellationToken cancellationToken = default)
     {
         await using var scope = _services.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<IKnowledgeEmbeddingJobRepository>();
@@ -32,7 +33,8 @@ public sealed class DbBackedKnowledgeEmbeddingJobQueue : IKnowledgeEmbeddingJobQ
             Status = "Pending",
             RetryCount = 0,
             MaxRetries = Math.Max(1, options.MaxRetries),
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            Priority = (int)priority
         };
 
         try

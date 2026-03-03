@@ -1,5 +1,6 @@
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
 
 #nullable disable
@@ -12,9 +13,7 @@ namespace StudyPilot.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterDatabase()
-                .Annotation("Npgsql:PostgresExtension:vector", ",,");
-
+            // vector extension must already exist (create as superuser: psql -U postgres -d StudyPilot -f scripts/postgres-grant-public.sql)
             migrationBuilder.CreateTable(
                 name: "BackgroundJobs",
                 columns: table => new
@@ -50,11 +49,60 @@ namespace StudyPilot.Infrastructure.Migrations
                     MaxRetries = table.Column<int>(type: "integer", nullable: false),
                     NextRetryAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ErrorMessage = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true)
+                    ErrorMessage = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    Priority = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_KnowledgeEmbeddingJobs", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "KnowledgeOutbox",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AggregateId = table.Column<Guid>(type: "uuid", nullable: false),
+                    EventType = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Payload = table.Column<string>(type: "text", nullable: false),
+                    Status = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    RetryCount = table.Column<int>(type: "integer", nullable: false),
+                    NextAttemptUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CreatedUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_KnowledgeOutbox", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "KnowledgePipelineHeartbeats",
+                columns: table => new
+                {
+                    InstanceId = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    LastSeenUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CurrentMode = table.Column<int>(type: "integer", nullable: false),
+                    OutboxPending = table.Column<int>(type: "integer", nullable: false),
+                    EmbeddingDepth = table.Column<int>(type: "integer", nullable: false),
+                    AILimiterWaiters = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_KnowledgePipelineHeartbeats", x => x.InstanceId);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "KnowledgeTokenUsage",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    TimestampUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    EstimatedTokens = table.Column<long>(type: "bigint", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_KnowledgeTokenUsage", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -97,6 +145,66 @@ namespace StudyPilot.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "OptimizationConfigHistory",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AppliedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ChunkSizeTokens = table.Column<int>(type: "integer", nullable: false),
+                    VectorTopK = table.Column<int>(type: "integer", nullable: false),
+                    EmbeddingBatchSize = table.Column<int>(type: "integer", nullable: false),
+                    MaxAIConcurrency = table.Column<int>(type: "integer", nullable: false),
+                    RetryBaseDelaySeconds = table.Column<int>(type: "integer", nullable: false),
+                    Version = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OptimizationConfigHistory", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "OptimizationConfigs",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    ChunkSizeTokens = table.Column<int>(type: "integer", nullable: false),
+                    VectorTopK = table.Column<int>(type: "integer", nullable: false),
+                    EmbeddingBatchSize = table.Column<int>(type: "integer", nullable: false),
+                    MaxAIConcurrency = table.Column<int>(type: "integer", nullable: false),
+                    RetryBaseDelaySeconds = table.Column<int>(type: "integer", nullable: false),
+                    LastUpdatedUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    Version = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OptimizationConfigs", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "OptimizationSnapshots",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    CapturedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    AvgChatLatencyMs = table.Column<double>(type: "double precision", nullable: false),
+                    P95ChatLatencyMs = table.Column<double>(type: "double precision", nullable: false),
+                    EmbeddingLatencyMs = table.Column<double>(type: "double precision", nullable: false),
+                    RetrievalHitRate = table.Column<double>(type: "double precision", nullable: false),
+                    RetryRate = table.Column<double>(type: "double precision", nullable: false),
+                    QueueDepth = table.Column<int>(type: "integer", nullable: false),
+                    AILimiterWaiters = table.Column<int>(type: "integer", nullable: false),
+                    TokenUsagePerMinute = table.Column<double>(type: "double precision", nullable: false),
+                    SuccessRate = table.Column<double>(type: "double precision", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OptimizationSnapshots", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "QuestionConceptLinks",
                 columns: table => new
                 {
@@ -119,6 +227,28 @@ namespace StudyPilot.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_QuizConceptOrders", x => new { x.QuizId, x.QuestionIndex });
+                });
+
+            migrationBuilder.CreateTable(
+                name: "QuizQuestionGenerationJobs",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    QuizId = table.Column<Guid>(type: "uuid", nullable: false),
+                    QuestionIndex = table.Column<int>(type: "integer", nullable: false),
+                    CorrelationId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    ClaimedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ClaimedBy = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    RetryCount = table.Column<int>(type: "integer", nullable: false),
+                    MaxRetries = table.Column<int>(type: "integer", nullable: false),
+                    NextRetryAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ErrorMessage = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_QuizQuestionGenerationJobs", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -326,6 +456,8 @@ namespace StudyPilot.Infrastructure.Migrations
                     FileName = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     StoragePath = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
                     ProcessingStatus = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    KnowledgeStatus = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    AIEnrichmentStatus = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     FailureReason = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
@@ -394,6 +526,10 @@ namespace StudyPilot.Infrastructure.Migrations
                     ChunkText = table.Column<string>(type: "character varying(8000)", maxLength: 8000, nullable: false),
                     TokenCount = table.Column<int>(type: "integer", nullable: false),
                     Embedding = table.Column<Vector>(type: "vector(1536)", nullable: false),
+                    EmbeddingVersion = table.Column<int>(type: "integer", nullable: false),
+                    EmbeddingModel = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    ChunkingVersion = table.Column<int>(type: "integer", nullable: false),
+                    EmbeddedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -538,6 +674,11 @@ namespace StudyPilot.Infrastructure.Migrations
                 columns: new[] { "UserId", "DocumentId", "CreatedAtUtc" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_Documents_KnowledgeStatus",
+                table: "Documents",
+                column: "KnowledgeStatus");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Documents_ProcessingStatus",
                 table: "Documents",
                 column: "ProcessingStatus");
@@ -575,6 +716,26 @@ namespace StudyPilot.Infrastructure.Migrations
                 columns: new[] { "Status", "NextRetryAtUtc" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_KnowledgeEmbeddingJobs_Status_Priority_CreatedAtUtc",
+                table: "KnowledgeEmbeddingJobs",
+                columns: new[] { "Status", "Priority", "CreatedAtUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_KnowledgeOutbox_AggregateId",
+                table: "KnowledgeOutbox",
+                column: "AggregateId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_KnowledgeOutbox_Status_NextAttemptUtc",
+                table: "KnowledgeOutbox",
+                columns: new[] { "Status", "NextAttemptUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_KnowledgeTokenUsage_TimestampUtc",
+                table: "KnowledgeTokenUsage",
+                column: "TimestampUtc");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_LearningGoals_TutorSessionId",
                 table: "LearningGoals",
                 column: "TutorSessionId");
@@ -605,6 +766,16 @@ namespace StudyPilot.Infrastructure.Migrations
                 columns: new[] { "UserId", "ConceptId" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_OptimizationConfigHistory_AppliedAtUtc",
+                table: "OptimizationConfigHistory",
+                column: "AppliedAtUtc");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OptimizationSnapshots_CapturedAtUtc",
+                table: "OptimizationSnapshots",
+                column: "CapturedAtUtc");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Questions_QuizId",
                 table: "Questions",
                 column: "QuizId");
@@ -629,6 +800,16 @@ namespace StudyPilot.Infrastructure.Migrations
                 name: "IX_QuizConceptOrders_QuizId",
                 table: "QuizConceptOrders",
                 column: "QuizId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_QuizQuestionGenerationJobs_QuizId_QuestionIndex",
+                table: "QuizQuestionGenerationJobs",
+                columns: new[] { "QuizId", "QuestionIndex" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_QuizQuestionGenerationJobs_Status",
+                table: "QuizQuestionGenerationJobs",
+                column: "Status");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Quizzes_CreatedForUserId",
@@ -722,10 +903,9 @@ namespace StudyPilot.Infrastructure.Migrations
                 column: "Email",
                 unique: true);
 
-            // Full-text search on DocumentChunks (hybrid search)
-            migrationBuilder.Sql(@"ALTER TABLE ""DocumentChunks"" ADD COLUMN IF NOT EXISTS ""SearchVector"" tsvector;");
-            migrationBuilder.Sql(@"UPDATE ""DocumentChunks"" SET ""SearchVector"" = to_tsvector('english', coalesce(""ChunkText"", '')) WHERE ""SearchVector"" IS NULL;");
-            migrationBuilder.Sql(@"CREATE INDEX IF NOT EXISTS ""IX_DocumentChunks_SearchVector"" ON ""DocumentChunks"" USING GIN (""SearchVector"");");
+            migrationBuilder.Sql(@"
+INSERT INTO ""OptimizationConfigs"" (""Id"", ""ChunkSizeTokens"", ""VectorTopK"", ""EmbeddingBatchSize"", ""MaxAIConcurrency"", ""RetryBaseDelaySeconds"", ""LastUpdatedUtc"", ""Version"")
+VALUES (1, 800, 24, 32, 4, 5, (NOW() AT TIME ZONE 'UTC'), 1);");
         }
 
         /// <inheritdoc />
@@ -744,10 +924,28 @@ namespace StudyPilot.Infrastructure.Migrations
                 name: "KnowledgeEmbeddingJobs");
 
             migrationBuilder.DropTable(
+                name: "KnowledgeOutbox");
+
+            migrationBuilder.DropTable(
+                name: "KnowledgePipelineHeartbeats");
+
+            migrationBuilder.DropTable(
+                name: "KnowledgeTokenUsage");
+
+            migrationBuilder.DropTable(
                 name: "LearningGoals");
 
             migrationBuilder.DropTable(
                 name: "LearningInsights");
+
+            migrationBuilder.DropTable(
+                name: "OptimizationConfigHistory");
+
+            migrationBuilder.DropTable(
+                name: "OptimizationConfigs");
+
+            migrationBuilder.DropTable(
+                name: "OptimizationSnapshots");
 
             migrationBuilder.DropTable(
                 name: "QuestionConceptLinks");
@@ -757,6 +955,9 @@ namespace StudyPilot.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "QuizConceptOrders");
+
+            migrationBuilder.DropTable(
+                name: "QuizQuestionGenerationJobs");
 
             migrationBuilder.DropTable(
                 name: "RefreshTokens");

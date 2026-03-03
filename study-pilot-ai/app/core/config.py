@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_model: str = "google/gemini-2.5-flash"  # free alternative: google/gemini-2.0-flash-exp:free
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3:8b"
+    ollama_model: str = "llama3.2"
     ollama_stream: bool = True  # stream tokens so UI doesn't freeze; set False to get full response in one chunk
     ollama_request_timeout: float = 120.0  # seconds; local models can be slow, use ≥120 for concept extraction
     llm_provider: str = "gemini"  # legacy: "gemini" or "openai"

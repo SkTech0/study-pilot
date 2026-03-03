@@ -20,6 +20,11 @@ public sealed class DocumentChunkConfiguration : IEntityTypeConfiguration<Docume
         builder.Property(c => c.ChunkText).HasMaxLength(8000);
         builder.Property(c => c.TokenCount);
 
+        builder.Property(c => c.EmbeddingVersion);
+        builder.Property(c => c.EmbeddingModel).HasMaxLength(200).IsRequired(false);
+        builder.Property(c => c.ChunkingVersion);
+        builder.Property(c => c.EmbeddedAtUtc).HasConversion(static v => v, static v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
         builder.Property(c => c.Embedding)
             .HasColumnType($"vector({DocumentChunk.EmbeddingDimensions})")
             .HasConversion(

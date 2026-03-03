@@ -13,5 +13,7 @@ public sealed class KnowledgeEmbeddingJob
     public DateTime? NextRetryAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public string? ErrorMessage { get; set; }
+    /// <summary>0=Critical, 1=High, 2=Normal, 3=Low. Lower = higher priority.</summary>
+    public int Priority { get; set; }
 }
 

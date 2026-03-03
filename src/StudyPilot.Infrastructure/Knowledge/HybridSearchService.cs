@@ -4,8 +4,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using StudyPilot.Application.Abstractions.Knowledge;
+using StudyPilot.Application.Abstractions.Optimization;
 using StudyPilot.Application.Abstractions.Persistence;
+using StudyPilot.Application.Knowledge.Constants;
 using StudyPilot.Application.Knowledge.Models;
+using StudyPilot.Infrastructure.Optimization;
 using StudyPilot.Infrastructure.Persistence.DbContext;
 using StudyPilot.Infrastructure.Services;
 
@@ -13,7 +16,6 @@ namespace StudyPilot.Infrastructure.Knowledge;
 
 public sealed class HybridSearchService : IHybridSearchService
 {
-    private const int VectorTopK = 24;
     private const int KeywordTopK = 24;
     private const int FinalTopK = 12;
     private const double VectorWeight = 0.6;
@@ -21,18 +23,20 @@ public sealed class HybridSearchService : IHybridSearchService
     private const double MasteryWeight = 0.2;
 
     private static readonly string KeywordSqlWithDoc = @"
-SELECT ""Id"" AS ""ChunkId"", ""DocumentId"", ""ChunkText"" AS ""Text"", ""TokenCount"",
-       ts_rank_cd(""SearchVector"", query) AS ""Score""
-FROM ""DocumentChunks"", plainto_tsquery('english', @q) AS query
-WHERE ""UserId"" = @userId AND ""DocumentId"" = @documentId AND ""SearchVector"" @@ query
+SELECT c.""Id"" AS ""ChunkId"", c.""DocumentId"", c.""ChunkText"" AS ""Text"", c.""TokenCount"",
+       ts_rank_cd(c.""SearchVector"", query) AS ""Score""
+FROM ""DocumentChunks"" c, plainto_tsquery('english', @q) AS query
+INNER JOIN ""Documents"" d ON d.""Id"" = c.""DocumentId""
+WHERE c.""UserId"" = @userId AND c.""DocumentId"" = @documentId AND d.""KnowledgeStatus"" = 'Ready' AND c.""SearchVector"" @@ query
 ORDER BY ""Score"" DESC NULLS LAST
 LIMIT @k";
 
     private static readonly string KeywordSqlGlobal = @"
-SELECT ""Id"" AS ""ChunkId"", ""DocumentId"", ""ChunkText"" AS ""Text"", ""TokenCount"",
-       ts_rank_cd(""SearchVector"", query) AS ""Score""
-FROM ""DocumentChunks"", plainto_tsquery('english', @q) AS query
-WHERE ""UserId"" = @userId AND ""SearchVector"" @@ query
+SELECT c.""Id"" AS ""ChunkId"", c.""DocumentId"", c.""ChunkText"" AS ""Text"", c.""TokenCount"",
+       ts_rank_cd(c.""SearchVector"", query) AS ""Score""
+FROM ""DocumentChunks"" c, plainto_tsquery('english', @q) AS query
+INNER JOIN ""Documents"" d ON d.""Id"" = c.""DocumentId""
+WHERE c.""UserId"" = @userId AND d.""KnowledgeStatus"" = 'Ready' AND c.""SearchVector"" @@ query
 ORDER BY ""Score"" DESC NULLS LAST
 LIMIT @k";
 
@@ -40,6 +44,8 @@ LIMIT @k";
     private readonly IVectorSearchService _vectorSearch;
     private readonly IUserConceptMasteryRepository _masteryRepository;
     private readonly IConceptRepository _conceptRepository;
+    private readonly IOptimizationConfigProvider _configProvider;
+    private readonly OptimizationMetricsBuffer? _metricsBuffer;
     private readonly ILogger<HybridSearchService> _logger;
 
     public HybridSearchService(
@@ -47,12 +53,16 @@ LIMIT @k";
         IVectorSearchService vectorSearch,
         IUserConceptMasteryRepository masteryRepository,
         IConceptRepository conceptRepository,
-        ILogger<HybridSearchService> logger)
+        IOptimizationConfigProvider configProvider,
+        ILogger<HybridSearchService> logger,
+        OptimizationMetricsBuffer? metricsBuffer = null)
     {
         _db = db;
         _vectorSearch = vectorSearch;
         _masteryRepository = masteryRepository;
         _conceptRepository = conceptRepository;
+        _configProvider = configProvider;
+        _metricsBuffer = metricsBuffer;
         _logger = logger;
     }
 
@@ -64,8 +74,9 @@ LIMIT @k";
         int topK,
         CancellationToken cancellationToken = default)
     {
+        var vectorTopK = Math.Clamp(_configProvider.GetVectorTopK(), 6, 50);
         var swTotal = Stopwatch.StartNew();
-        var vectorTask = _vectorSearch.SearchAsync(userId, queryEmbedding, documentId, VectorTopK, cancellationToken);
+        var vectorTask = _vectorSearch.SearchAsync(userId, queryEmbedding, documentId, vectorTopK, cancellationToken);
         var keywordTask = !string.IsNullOrWhiteSpace(queryText) && queryText.Length <= 500
             ? RunKeywordSearchAsync(userId, documentId, queryText.Trim(), cancellationToken)
             : Task.FromResult<IReadOnlyList<RetrievedChunk>>(Array.Empty<RetrievedChunk>());
@@ -103,14 +114,20 @@ LIMIT @k";
         }
 
         if (!keywordOk || keywordResults.Count == 0)
-            return vectorResults.Take(topK).ToList();
+        {
+            var result = vectorResults.Take(topK).ToList();
+            _metricsBuffer?.RecordRetrieval(result.Count >= RetrievalConstants.MinimumChunksForAnswer);
+            return result;
+        }
 
         var rerankSw = Stopwatch.StartNew();
         var merged = MergeAndRerank(vectorResults, keywordResults, masteryBoost);
         rerankSw.Stop();
         StudyPilotMetrics.HybridRerankMs.Record(rerankSw.ElapsedMilliseconds);
 
-        return merged.Take(topK).ToList();
+        var final = merged.Take(topK).ToList();
+        _metricsBuffer?.RecordRetrieval(final.Count >= RetrievalConstants.MinimumChunksForAnswer);
+        return final;
     }
 
     private async Task<IReadOnlyList<RetrievedChunk>> RunKeywordSearchAsync(

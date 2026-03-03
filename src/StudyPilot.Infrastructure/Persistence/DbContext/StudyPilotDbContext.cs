@@ -32,6 +32,12 @@ public sealed class StudyPilotDbContext : Microsoft.EntityFrameworkCore.DbContex
     public DbSet<BackgroundJob> BackgroundJobs => Set<BackgroundJob>();
     public DbSet<QuizQuestionGenerationJob> QuizQuestionGenerationJobs => Set<QuizQuestionGenerationJob>();
     public DbSet<KnowledgeEmbeddingJob> KnowledgeEmbeddingJobs => Set<KnowledgeEmbeddingJob>();
+    public DbSet<KnowledgeOutboxEntry> KnowledgeOutboxEntries => Set<KnowledgeOutboxEntry>();
+    public DbSet<KnowledgePipelineHeartbeat> KnowledgePipelineHeartbeats => Set<KnowledgePipelineHeartbeat>();
+    public DbSet<KnowledgeTokenUsage> KnowledgeTokenUsage => Set<KnowledgeTokenUsage>();
+    public DbSet<OptimizationSnapshot> OptimizationSnapshots => Set<OptimizationSnapshot>();
+    public DbSet<OptimizationConfig> OptimizationConfigs => Set<OptimizationConfig>();
+    public DbSet<OptimizationConfigHistory> OptimizationConfigHistory => Set<OptimizationConfigHistory>();
     internal DbSet<QuestionConceptLink> QuestionConceptLinks => Set<QuestionConceptLink>();
     internal DbSet<ChatMessageCitation> ChatMessageCitations => Set<ChatMessageCitation>();
 

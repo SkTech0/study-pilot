@@ -15,7 +15,13 @@ public sealed class GetDocumentsQueryHandler : IRequestHandler<GetDocumentsQuery
     {
         var documents = await _documentRepository.GetByUserIdAsync(request.UserId, cancellationToken);
         var items = documents
-            .Select(d => new DocumentListItem(d.Id, d.FileName, d.ProcessingStatus.ToString(), d.CreatedAtUtc, d.FailureReason))
+            .Select(d => new DocumentListItem(
+                d.Id,
+                d.FileName,
+                d.ProcessingStatus.ToString(),
+                d.CreatedAtUtc,
+                d.FailureReason,
+                d.KnowledgeStatus.ToString()))
             .ToList();
         return Result<IReadOnlyList<DocumentListItem>>.Success(items);
     }
