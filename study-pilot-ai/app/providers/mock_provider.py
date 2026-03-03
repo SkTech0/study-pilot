@@ -1,5 +1,7 @@
 """Mock AI provider for free local testing. No external API calls."""
 
+import json
+
 from app.providers.base import LLMProvider
 
 
@@ -26,6 +28,14 @@ class MockProvider(LLMProvider):
         ]
         return questions[:n]
 
+    def _is_tutor_prompt(self, system: str) -> bool:
+        s = (system or "").lower()
+        return "tutor" in s and ("nextstep" in s or "optionalexercise" in s or "return json" in s)
+
+    def _is_evaluate_prompt(self, system: str) -> bool:
+        s = (system or "").lower()
+        return "evaluating" in s and "iscorrect" in s
+
     async def chat(
         self,
         system: str,
@@ -33,6 +43,20 @@ class MockProvider(LLMProvider):
         context: list[dict],
         explanation_style: str | None = None,
     ) -> dict:
+        if self._is_evaluate_prompt(system):
+            answer = json.dumps({
+                "isCorrect": True,
+                "explanation": "Mock: Your answer is correct for E2E testing.",
+            })
+            return {"answer": answer, "citedChunkIds": []}
+        if self._is_tutor_prompt(system):
+            answer = json.dumps({
+                "message": "Mock tutor response. This is a short explanation for E2E testing.",
+                "nextStep": "Explain",
+                "optionalExercise": None,
+                "citedChunkIds": [],
+            })
+            return {"answer": answer, "citedChunkIds": []}
         return {
             "answer": "This is a mock chat response. Enable a real LLM provider for RAG answers.",
             "citedChunkIds": [],

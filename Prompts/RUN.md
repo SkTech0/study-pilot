@@ -143,6 +143,32 @@ Runs at http://localhost:4200 and proxies `/api` to http://localhost:5024.
 
 ---
 
+## End-to-end test with mock AI
+
+To test all functionality without API keys, use **mock AI** (deterministic responses, no external LLM calls).
+
+1. **Start the stack with mock AI** (from repo root):
+   ```bash
+   ./scripts/run-local.sh
+   ```
+   This sets `AI_MODE=mock` for the Python service automatically.
+
+2. **In another terminal**, run the E2E script (from repo root):
+   ```bash
+   ./scripts/e2e-mock-test.sh
+   ```
+   The script checks API and AI health, registers a user, logs in, optionally uploads `scripts/e2e-sample.pdf`, polls for document completion, creates a chat session and sends a message, starts a quiz and submits an answer, starts a tutor session and sends a message, and fetches learning suggestions. Any step that fails (e.g. no sample PDF) is skipped where possible so the rest still runs.
+
+   **Optional:** Install `jq` for more reliable JSON parsing in the script (`brew install jq` on macOS).
+
+3. **Manual mock AI:** To run the AI service in mock mode without `run-local.sh`, set in `study-pilot-ai/.env`:
+   ```
+   AI_MODE=mock
+   ```
+   Then start the AI service as in step 2 of "Option B" above.
+
+---
+
 ## Troubleshooting
 
 ### Document stays "Processing" or everything feels slow
