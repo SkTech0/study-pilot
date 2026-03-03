@@ -26,14 +26,19 @@ public sealed class KnowledgeEmbeddingJobRepository : IKnowledgeEmbeddingJobRepo
 
     public async Task<Persistence.KnowledgeEmbeddingJob?> TryClaimNextAsync(string workerId, TimeSpan processingTimeout, int maxRetries, CancellationToken cancellationToken = default)
     {
-        var cutoff = DateTime.UtcNow.Add(-processingTimeout);
-        var now = DateTime.UtcNow;
-        Guid claimedId = default;
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-        try
+        var strategy = _db.Database.CreateExecutionStrategy();
+
+        return await strategy.ExecuteAsync(async () =>
         {
-            var ids = await _db.Database
-                .SqlQueryRaw<Guid>(@"
+            var cutoff = DateTime.UtcNow.Add(-processingTimeout);
+            var now = DateTime.UtcNow;
+            Guid claimedId = default;
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var ids = await _db.Database
+                    .SqlQueryRaw<Guid>(@"
 SELECT ""Id"" FROM ""KnowledgeEmbeddingJobs""
 WHERE (""Status"" = 'Pending' OR (""Status"" = 'Processing' AND ""ClaimedAtUtc"" < {0}))
 AND (""NextRetryAtUtc"" IS NULL OR ""NextRetryAtUtc"" <= {1})
@@ -41,31 +46,34 @@ AND ""RetryCount"" < {2}
 ORDER BY ""CreatedAtUtc""
 LIMIT 1
 FOR UPDATE SKIP LOCKED", cutoff, now, maxRetries)
-                .ToListAsync(cancellationToken);
+                    .ToListAsync(cancellationToken);
 
-            if (ids.Count == 0)
-            {
+                if (ids.Count == 0)
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                    return (Persistence.KnowledgeEmbeddingJob?)null;
+                }
+
+                claimedId = ids[0];
+                await _db.KnowledgeEmbeddingJobs
+                    .Where(j => j.Id == claimedId)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(j => j.Status, "Processing")
+                        .SetProperty(j => j.ClaimedAtUtc, now)
+                        .SetProperty(j => j.ClaimedBy, workerId), cancellationToken);
+
                 await transaction.CommitAsync(cancellationToken);
-                return null;
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
             }
 
-            claimedId = ids[0];
-            await _db.KnowledgeEmbeddingJobs
-                .Where(j => j.Id == claimedId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(j => j.Status, "Processing")
-                    .SetProperty(j => j.ClaimedAtUtc, now)
-                    .SetProperty(j => j.ClaimedBy, workerId), cancellationToken);
-
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
-
-        return await _db.KnowledgeEmbeddingJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == claimedId, cancellationToken);
+            return claimedId == Guid.Empty
+                ? null
+                : await _db.KnowledgeEmbeddingJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == claimedId, cancellationToken);
+        });
     }
 
     public async Task MarkCompletedAsync(Guid jobId, CancellationToken cancellationToken = default)

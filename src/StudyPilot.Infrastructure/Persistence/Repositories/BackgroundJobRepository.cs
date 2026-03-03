@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using StudyPilot.Infrastructure.Persistence.DbContext;
 
 namespace StudyPilot.Infrastructure.Persistence.Repositories;
@@ -19,8 +20,13 @@ public interface IBackgroundJobRepository
 public sealed class BackgroundJobRepository : IBackgroundJobRepository
 {
     private readonly StudyPilotDbContext _db;
+    private readonly ILogger<BackgroundJobRepository> _logger;
 
-    public BackgroundJobRepository(StudyPilotDbContext db) => _db = db;
+    public BackgroundJobRepository(StudyPilotDbContext db, ILogger<BackgroundJobRepository> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
 
     public async Task AddAsync(BackgroundJob job, CancellationToken cancellationToken = default)
     {
@@ -30,14 +36,19 @@ public sealed class BackgroundJobRepository : IBackgroundJobRepository
 
     public async Task<BackgroundJob?> TryClaimNextAsync(string workerId, TimeSpan processingTimeout, int maxRetries, CancellationToken cancellationToken = default)
     {
-        var cutoff = DateTime.UtcNow.Add(-processingTimeout);
-        var now = DateTime.UtcNow;
-        Guid claimedId = default;
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-        try
+        var strategy = _db.Database.CreateExecutionStrategy();
+
+        return await strategy.ExecuteAsync(async () =>
         {
-            var ids = await _db.Database
-                .SqlQueryRaw<Guid>(@"
+            var cutoff = DateTime.UtcNow.Add(-processingTimeout);
+            var now = DateTime.UtcNow;
+            Guid claimedId = default;
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var ids = await _db.Database
+                    .SqlQueryRaw<Guid>(@"
 SELECT ""Id"" FROM ""BackgroundJobs""
 WHERE (""Status"" = 'Pending' OR (""Status"" = 'Processing' AND ""ClaimedAtUtc"" < {0}))
 AND (""NextRetryAtUtc"" IS NULL OR ""NextRetryAtUtc"" <= {1})
@@ -45,27 +56,40 @@ AND ""RetryCount"" < {2}
 ORDER BY ""CreatedAtUtc"" DESC
 LIMIT 1
 FOR UPDATE SKIP LOCKED", cutoff, now, maxRetries)
-                .ToListAsync(cancellationToken);
-            if (ids.Count == 0)
-            {
+                    .ToListAsync(cancellationToken);
+
+                if (ids.Count == 0)
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                    var pendingCount = await GetPendingCountAsync(cancellationToken);
+                    _logger.LogInformation(
+                        "TryClaimNextAsync: no eligible job found. PendingOrProcessingCount={PendingCount} WorkerId={WorkerId} MaxRetries={MaxRetries}",
+                        pendingCount, workerId, maxRetries);
+                    return (BackgroundJob?)null;
+                }
+
+                claimedId = ids[0];
+                await _db.BackgroundJobs
+                    .Where(j => j.Id == claimedId)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(j => j.Status, "Processing")
+                        .SetProperty(j => j.ClaimedAtUtc, now)
+                        .SetProperty(j => j.ClaimedBy, workerId), cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                return null;
             }
-            claimedId = ids[0];
-            await _db.BackgroundJobs
-                .Where(j => j.Id == claimedId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(j => j.Status, "Processing")
-                    .SetProperty(j => j.ClaimedAtUtc, now)
-                    .SetProperty(j => j.ClaimedBy, workerId), cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
-        return await _db.BackgroundJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == claimedId, cancellationToken);
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _logger.LogError(ex,
+                    "TryClaimNextAsync failed: {Message} InnerMessage={InnerMessage} StackTrace={StackTrace}",
+                    ex.Message, ex.InnerException?.Message, ex.StackTrace);
+                throw;
+            }
+
+            return claimedId == Guid.Empty
+                ? null
+                : await _db.BackgroundJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == claimedId, cancellationToken);
+        });
     }
 
     public async Task MarkCompletedAsync(Guid jobId, CancellationToken cancellationToken = default)

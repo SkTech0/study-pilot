@@ -69,6 +69,10 @@ public sealed class BackgroundJobWorker : BackgroundService
                 var job = await jobRepository.TryClaimNextAsync(workerId, processingTimeout, maxRetries, stoppingToken);
                 if (job is null)
                 {
+                    var pendingCount = await jobRepository.GetPendingCountAsync(stoppingToken);
+                    _logger.LogDebug(
+                        "Background job poll: no job claimed this cycle. PendingOrProcessingCount={PendingCount} (retry in {PollIntervalSeconds}s)",
+                        pendingCount, _options.PollIntervalSeconds);
                     await Task.Delay(pollInterval, stoppingToken);
                     continue;
                 }
@@ -122,7 +126,9 @@ public sealed class BackgroundJobWorker : BackgroundService
             catch (Exception ex)
             {
                 StudyPilotMetrics.BackgroundJobFailuresTotal.Add(1);
-                _logger.LogError(ex, "BackgroundJobWorker poll or claim error");
+                _logger.LogError(ex,
+                    "BackgroundJobWorker poll or claim error: {Message} InnerMessage={InnerMessage} StackTrace={StackTrace}",
+                    ex.Message, ex.InnerException?.Message, ex.StackTrace);
                 await Task.Delay(pollInterval, stoppingToken);
             }
         }

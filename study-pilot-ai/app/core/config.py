@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3:8b"
     ollama_stream: bool = True  # stream tokens so UI doesn't freeze; set False to get full response in one chunk
+    ollama_request_timeout: float = 120.0  # seconds; local models can be slow, use ≥120 for concept extraction
     llm_provider: str = "gemini"  # legacy: "gemini" or "openai"
     llm_fallback_chain: str = "gemini,deepseek,openrouter,openai"  # comma-separated; first is primary; 429/failure tries next
     request_timeout: float = 60.0

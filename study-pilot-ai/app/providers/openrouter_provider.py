@@ -8,7 +8,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 from app.core.config import Settings
 from app.prompts import get_chat_prompt, get_extract_concepts_prompt, get_generate_quiz_prompt
 from app.providers.base import LLMProvider
-from app.providers.parse_utils import parse_json_array, parse_json_object
+from app.providers.parse_utils import parse_json_array, safe_parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +76,8 @@ class OpenRouterProvider(LLMProvider):
         question: str,
         context: list[dict],
         explanation_style: str | None = None,
+        require_json: bool = True,
     ) -> dict:
         prompt = get_chat_prompt(system, question, context, explanation_style)
         content = await self._chat([{"role": "user", "content": prompt}])
-        obj = parse_json_object(content)
-        return {"answer": obj.get("answer", ""), "citedChunkIds": obj.get("citedChunkIds") or []}
+        return safe_parse_llm_json(content)

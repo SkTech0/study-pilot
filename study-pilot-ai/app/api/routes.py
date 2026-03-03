@@ -47,9 +47,28 @@ async def extract_concepts(
     body: ExtractConceptsRequest,
     service: ConceptService = Depends(get_concept_service),
 ):
-    logger.info("Document processing (extract-concepts) requested document_id=%s text_len=%d", body.document_id, len(body.text or ""))
-    concepts = await service.extract_concepts(body.text)
-    return ExtractConceptsResponse(concepts=concepts)
+    text_len = len(body.text or "")
+    logger.info(
+        "Document processing (extract-concepts) requested document_id=%s text_len=%d",
+        body.document_id,
+        text_len,
+    )
+    try:
+        concepts = await service.extract_concepts(body.text)
+        logger.info(
+            "Document processing (extract-concepts) completed document_id=%s concept_count=%d",
+            body.document_id,
+            len(concepts or []),
+        )
+        return ExtractConceptsResponse(concepts=concepts)
+    except Exception as exc:
+        logger.exception(
+            "Document processing (extract-concepts) failed document_id=%s text_len=%d error=%s",
+            body.document_id,
+            text_len,
+            str(exc),
+        )
+        raise
 
 
 @router.post("/generate-quiz", response_model=GenerateQuizResponse)

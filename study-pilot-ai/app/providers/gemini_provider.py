@@ -8,7 +8,7 @@ from tenacity import retry, stop_after_attempt, retry_if_exception
 from app.core.config import Settings
 from app.prompts import get_chat_prompt, get_extract_concepts_prompt, get_generate_quiz_prompt
 from app.providers.base import LLMProvider
-from app.providers.parse_utils import parse_json_array, parse_json_object
+from app.providers.parse_utils import parse_json_array, safe_parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ _GEMINI_CALL_INTERVAL_SEC = 5.0
 class GeminiProvider(LLMProvider):
     """Google Gemini API provider. Uses GEMINI_API_KEY or settings.gemini_api_key."""
 
+    supports_json_mode: bool = True
     BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
     _semaphore = asyncio.Semaphore(1)
     _last_call_time: float = 0
@@ -125,8 +126,9 @@ class GeminiProvider(LLMProvider):
         question: str,
         context: list[dict],
         explanation_style: str | None = None,
+        require_json: bool = True,
     ) -> dict:
         prompt = get_chat_prompt(system, question, context, explanation_style)
         content = await self._generate(prompt)
-        obj = parse_json_object(content)
-        return {"answer": obj.get("answer", ""), "citedChunkIds": obj.get("citedChunkIds") or []}
+        # Gemini is configured to return JSON, but we still normalize defensively.
+        return safe_parse_llm_json(content)

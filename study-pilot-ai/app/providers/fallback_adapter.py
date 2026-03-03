@@ -17,18 +17,22 @@ FALLBACK_DELAY_AFTER_429_SEC = 2.0
 def _is_rate_limit(exc: Exception) -> bool:
     if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
         return True
-    if isinstance(exc, RetryError) and exc.last_attempt.failed():
-        inner = exc.last_attempt.exception()
-        return inner is not None and _is_rate_limit(inner)
+    if isinstance(exc, RetryError):
+        last = exc.last_attempt
+        if getattr(last, "failed", False):
+            inner = last.exception()
+            return inner is not None and _is_rate_limit(inner)
     return False
 
 
 def _unwrap_error(e: Exception) -> Exception:
     """Unwrap tenacity RetryError so we raise the underlying cause (e.g. HTTPStatusError)."""
-    if isinstance(e, RetryError) and e.last_attempt.failed():
-        exc = e.last_attempt.exception()
-        if exc is not None:
-            return exc
+    if isinstance(e, RetryError):
+        last = e.last_attempt
+        if getattr(last, "failed", False):
+            exc = last.exception()
+            if exc is not None:
+                return exc
     return e
 
 
@@ -95,14 +99,24 @@ class FallbackAdapter(LLMProvider):
         question: str,
         context: list[dict],
         explanation_style: str | None = None,
+        require_json: bool = True,
     ) -> dict:
         last_error: Exception | None = None
         for i, provider in enumerate(self._providers):
             name = self._names[i] if i < len(self._names) else f"provider_{i}"
             try:
-                result = await provider.chat(system, question, context, explanation_style)
+                result = await provider.chat(
+                    system, question, context, explanation_style, require_json=require_json
+                )
                 logger.info("LLM chat succeeded with provider=%s", name)
-                return result if isinstance(result, dict) else {}
+                if isinstance(result, dict):
+                    # Ensure contract keys exist even if a provider implementation drifted.
+                    answer = result.get("answer") or ""
+                    cited = result.get("citedChunkIds") or []
+                    if not isinstance(cited, list):
+                        cited = []
+                    return {"answer": str(answer), "citedChunkIds": cited}
+                return {"answer": "", "citedChunkIds": []}
             except Exception as e:
                 last_error = _unwrap_error(e)
                 logger.warning(

@@ -92,6 +92,11 @@ def parse_json_array(raw: str) -> list[dict]:
 
 
 def parse_json_object(raw: str) -> dict:
+    """Legacy JSON object parser used for non-chat flows.
+
+    Returns {} on failure. For chat responses prefer safe_parse_llm_json(), which always
+    normalizes to a stable schema.
+    """
     raw = _strip_fences(raw)
     try:
         out = json.loads(raw)
@@ -115,3 +120,81 @@ def parse_json_object(raw: str) -> dict:
                 pass
         logger.warning("Could not parse JSON object from LLM: %s. Returning empty object.", e)
         return {}
+
+
+def _normalize_chat_object(obj: dict, raw_fallback: str | None = None) -> dict:
+    """Normalize varied LLM JSON shapes into the stable chat contract."""
+    answer = obj.get("answer")
+    if not isinstance(answer, str):
+        if answer is None:
+            answer = raw_fallback or ""
+        else:
+            answer = str(answer)
+    answer = answer.strip()
+
+    cited = (
+        obj.get("citedChunkIds")
+        or obj.get("cited_chunk_ids")
+        or obj.get("cited_chunks")
+        or []
+    )
+    if not isinstance(cited, list):
+        cited = []
+    cited_ids = [str(x).strip() for x in cited if isinstance(x, (str, int)) and str(x).strip()]
+
+    return {"answer": answer, "citedChunkIds": cited_ids}
+
+
+def safe_parse_llm_json(raw: str) -> dict:
+    """Parse chat-style LLM output into a robust JSON schema.
+
+    Guarantees:
+    - Always returns a dict with keys:
+        - answer: str
+        - citedChunkIds: list[str]
+    - Never raises, never returns {}.
+    Parsing strategy:
+    1) Try strict JSON (after stripping fences).
+    2) Try to extract the first {...} JSON object substring.
+    3) Fallback: treat entire content as plain-text answer.
+    """
+    if raw is None:
+        logger.warning("LLM returned None for chat; using empty answer.")
+        return {"answer": "", "citedChunkIds": []}
+
+    text = _strip_fences(str(raw))
+    if not text.strip():
+        logger.warning("LLM returned empty response for chat; using empty answer.")
+        return {"answer": "", "citedChunkIds": []}
+
+    # 1) Strict parse
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict):
+            logger.info("LLM returned valid JSON for chat.")
+            return _normalize_chat_object(data, raw_fallback=text)
+    except json.JSONDecodeError:
+        pass
+
+    # 2) Extract JSON object substring if present (e.g. surrounding prose)
+    s = text.strip()
+    start = s.find("{")
+    end = s.rfind("}")
+    if start != -1 and end > start:
+        candidate = s[start : end + 1]
+        try:
+            data = json.loads(candidate)
+            if isinstance(data, dict):
+                logger.warning(
+                    "Extracted JSON object from LLM chat response with surrounding text."
+                )
+                return _normalize_chat_object(data, raw_fallback=text)
+        except json.JSONDecodeError:
+            pass
+
+    # 3) Fallback: use raw text as answer
+    logger.warning("JSON parse failed for LLM chat response — using fallback text mode.")
+    # Truncate in debug to avoid huge logs / leaking large responses.
+    debug_preview = s[:500] + ("…" if len(s) > 500 else "")
+    logger.debug("Raw LLM chat response (truncated): %s", debug_preview)
+    return {"answer": s, "citedChunkIds": []}

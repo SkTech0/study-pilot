@@ -61,9 +61,10 @@ Install and start PostgreSQL, then create the DB and user. **PostgreSQL 15+** no
 
 ```sql
 CREATE DATABASE "StudyPilot";
+CREATE EXTENSION IF NOT EXISTS vector;
 CREATE USER studypilot WITH PASSWORD 'postgres';
 GRANT ALL PRIVILEGES ON DATABASE "StudyPilot" TO studypilot;
-CREATE EXTENSION IF NOT EXISTS vector;
+
 -- Required on PostgreSQL 15+: allow app user to run migrations (create tables in public)
 \c "StudyPilot"
 GRANT USAGE ON SCHEMA public TO studypilot;
@@ -273,6 +274,30 @@ All AI-related settings are documented in one place:
   - For local dev without real LLM calls use `AI_MODE=mock` in `study-pilot-ai/.env`.
 
 - **Docker:** Set keys and `AIService__BaseUrl` in `deploy/.env` (see `deploy/.env.example`).
+
+---
+
+## Making metrics readable
+
+Raw metrics from the API (OpenTelemetry / .NET) are noisy. To get a **clean summary** in the terminal:
+
+**PowerShell** (from repo root): save your metrics dump to a file, then:
+
+```powershell
+Get-Content metrics-dump.txt | .\scripts\format-metrics.ps1
+```
+
+The script prints each metric with a short plain-English explanation. Key metrics:
+
+| Metric | Meaning |
+|--------|--------|
+| `ai_request_duration_ms` | Time spent in AI service calls (health, extract-concepts, quiz). ~2s each often = health checks. |
+| `background_queue_length` | Document processing jobs waiting in the queue (e.g. 1 = one job pending). |
+| `background_job_failures_total` | Total document jobs that failed (check API logs for reason). |
+| `http.client.request.time_in_queue` | Seconds outbound requests waited for a free HTTP connection (e.g. to AI). ~2s = some queuing to localhost:8000. |
+| `http.client.request.duration` | Duration of outbound requests (e.g. to AI). |
+| `http_requests_total` | Total requests to the API. |
+| `http_request_duration_ms` | Per-request duration to the API. |
 
 ---
 

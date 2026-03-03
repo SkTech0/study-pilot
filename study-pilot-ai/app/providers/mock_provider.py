@@ -42,6 +42,7 @@ class MockProvider(LLMProvider):
         question: str,
         context: list[dict],
         explanation_style: str | None = None,
+        require_json: bool = True,
     ) -> dict:
         if self._is_evaluate_prompt(system):
             answer = json.dumps({
