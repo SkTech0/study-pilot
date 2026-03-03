@@ -49,6 +49,9 @@ def _repair_truncated_json_array(raw: str) -> str | None:
 
 def parse_json_array(raw: str) -> list[dict]:
     raw = _strip_fences(raw)
+    if not raw or not raw.strip():
+        logger.warning("LLM returned empty response. Returning empty list.")
+        return []
     try:
         out = json.loads(raw)
         return out if isinstance(out, list) else [out] if isinstance(out, dict) else []
@@ -64,6 +67,24 @@ def parse_json_array(raw: str) -> list[dict]:
                     return out
             except json.JSONDecodeError:
                 pass
+        # Fallback: response may have leading text (e.g. "Here is the JSON: [...]")
+        start = raw.find("[")
+        if start != -1:
+            depth = 0
+            for i in range(start, len(raw)):
+                if raw[i] == "[":
+                    depth += 1
+                elif raw[i] == "]":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            out = json.loads(raw[start : i + 1])
+                            if isinstance(out, list):
+                                logger.warning("Extracted JSON array from LLM response with surrounding text.")
+                                return out
+                        except json.JSONDecodeError:
+                            pass
+                        break
         logger.warning(
             "Could not parse JSON from LLM: %s. Returning empty list.", e
         )

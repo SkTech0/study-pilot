@@ -1,6 +1,9 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, Request, HTTPException
+
+logger = logging.getLogger(__name__)
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.core.config import Settings
@@ -44,6 +47,7 @@ async def extract_concepts(
     body: ExtractConceptsRequest,
     service: ConceptService = Depends(get_concept_service),
 ):
+    logger.info("Document processing (extract-concepts) requested document_id=%s text_len=%d", body.document_id, len(body.text or ""))
     concepts = await service.extract_concepts(body.text)
     return ExtractConceptsResponse(concepts=concepts)
 

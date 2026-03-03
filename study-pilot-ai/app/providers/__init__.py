@@ -8,6 +8,7 @@ from app.providers.deepseek_provider import DeepSeekProvider
 from app.providers.fallback_adapter import FallbackAdapter
 from app.providers.gemini_provider import GeminiProvider
 from app.providers.mock_provider import MockProvider
+from app.providers.ollama_provider import OllamaProvider
 from app.providers.openai_provider import OpenAIProvider
 from app.providers.openrouter_provider import OpenRouterProvider
 
@@ -40,7 +41,10 @@ def _build_fallback_chain(settings: Settings) -> list[tuple[str, LLMProvider]]:
     names = [n.strip().lower() for n in chain_str.split(",") if n.strip()]
     out: list[tuple[str, LLMProvider]] = []
     for name in names:
-        if name == "gemini" and _has_gemini_key(settings):
+        if name == "ollama":
+            # Ollama is local; no API key required
+            out.append(("ollama", OllamaProvider(settings)))
+        elif name == "gemini" and _has_gemini_key(settings):
             out.append(("gemini", GeminiProvider(settings)))
         elif name == "deepseek" and _has_deepseek_key(settings):
             out.append(("deepseek", DeepSeekProvider(settings)))
@@ -101,6 +105,7 @@ def get_provider(settings: Settings) -> LLMProvider:
 __all__ = [
     "LLMProvider",
     "MockProvider",
+    "OllamaProvider",
     "OpenAIProvider",
     "GeminiProvider",
     "DeepSeekProvider",

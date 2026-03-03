@@ -12,6 +12,8 @@ public interface IBackgroundJobRepository
     Task ReleaseStuckJobsAsync(TimeSpan processingTimeout, CancellationToken cancellationToken = default);
     Task<bool> ExistsPendingOrProcessingForDocumentAsync(Guid documentId, CancellationToken cancellationToken = default);
     Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default);
+    /// <summary>Reset all Failed jobs to Pending (RetryCount=0, clear claim/next retry) so the worker can process them. Returns count reset.</summary>
+    Task<int> ResetFailedJobsToPendingAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class BackgroundJobRepository : IBackgroundJobRepository
@@ -113,4 +115,17 @@ WHERE ""Id"" = {3}", status, err, nextRetryAtUtc ?? (object)DBNull.Value, jobId,
 
     public async Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default) =>
         await _db.BackgroundJobs.CountAsync(j => j.Status == "Pending" || j.Status == "Processing", cancellationToken);
+
+    public async Task<int> ResetFailedJobsToPendingAsync(CancellationToken cancellationToken = default)
+    {
+        return await _db.BackgroundJobs
+            .Where(j => j.Status == "Failed")
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(j => j.Status, "Pending")
+                .SetProperty(j => j.RetryCount, 0)
+                .SetProperty(j => j.NextRetryAtUtc, (DateTime?)null)
+                .SetProperty(j => j.ClaimedAtUtc, (DateTime?)null)
+                .SetProperty(j => j.ClaimedBy, (string?)null)
+                .SetProperty(j => j.ErrorMessage, (string?)null), cancellationToken);
+    }
 }

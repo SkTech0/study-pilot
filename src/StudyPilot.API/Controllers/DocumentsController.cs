@@ -10,6 +10,7 @@ using StudyPilot.API.Extensions;
 using StudyPilot.Application.Abstractions.Observability;
 using StudyPilot.Application.Common.Errors;
 using StudyPilot.Application.Documents.GetDocuments;
+using StudyPilot.Application.Documents.RetryFailedDocumentProcessing;
 using StudyPilot.Application.Documents.UploadDocument;
 
 namespace StudyPilot.API.Controllers;
@@ -72,8 +73,8 @@ public sealed class DocumentsController : ControllerBase
 
         stream.Position = 0;
         var storagePath = await _fileStorage.SaveAsync(stream, safeFileName, userId, cancellationToken);
-        var processSync = _env.IsDevelopment();
-        var command = new UploadDocumentCommand(userId, safeFileName, storagePath, ProcessSync: processSync);
+        // Always process in background so upload returns quickly; sync processing would block the request for minutes (LLM extract concepts).
+        var command = new UploadDocumentCommand(userId, safeFileName, storagePath, ProcessSync: false);
         var result = await _mediator.Send(command, cancellationToken);
 
         return result.ToActionResult(correlationId, v => _mapper.Map<UploadDocumentResponse>(v));
@@ -88,5 +89,16 @@ public sealed class DocumentsController : ControllerBase
         var query = new GetDocumentsQuery(userId);
         var result = await _mediator.Send(query, cancellationToken);
         return result.ToActionResult(_correlationIdAccessor?.Get(), list => (IReadOnlyList<DocumentResponse>)list!.Select(_mapper.Map<DocumentResponse>).ToList());
+    }
+
+    /// <summary>Reset all failed documents and failed background jobs to Pending so the worker can process them. Call this to clear the queue and reprocess failed items.</summary>
+    [HttpPost("retry-failed-processing")]
+    public async Task<ActionResult<ApiResponse<RetryFailedDocumentProcessingResponse>>> RetryFailedProcessing(CancellationToken cancellationToken)
+    {
+        if (this.UnauthorizedIfNoUser<RetryFailedDocumentProcessingResponse>(_correlationIdAccessor) is { } unauthorized)
+            return unauthorized;
+        var command = new RetryFailedDocumentProcessingCommand();
+        var result = await _mediator.Send(command, cancellationToken);
+        return result.ToActionResult(_correlationIdAccessor?.Get(), v => new RetryFailedDocumentProcessingResponse(v.DocumentsReset, v.JobsReset));
     }
 }

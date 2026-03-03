@@ -57,4 +57,13 @@ public sealed class DocumentRepository : IDocumentRepository
             .Where(d => d.ProcessingStatus == ProcessingStatus.Processing && d.UpdatedAtUtc < cutoffUtc)
             .Select(d => d.Id)
             .ToListAsync(cancellationToken);
+
+    public async Task<int> ResetFailedDocumentsToPendingAsync(CancellationToken cancellationToken = default)
+    {
+        return await _db.Documents
+            .Where(d => d.ProcessingStatus == ProcessingStatus.Failed)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.ProcessingStatus, ProcessingStatus.Pending)
+                .SetProperty(d => d.FailureReason, (string?)null), cancellationToken);
+    }
 }

@@ -13,4 +13,6 @@ public interface IDocumentRepository
     Task ResetToPendingAsync(Guid documentId, CancellationToken cancellationToken = default);
     /// <summary>Document IDs stuck in Processing since before cutoff (for recovery).</summary>
     Task<IReadOnlyList<Guid>> GetStuckProcessingDocumentIdsAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default);
+    /// <summary>Reset all documents in Failed state to Pending so the worker can process them. Returns count reset.</summary>
+    Task<int> ResetFailedDocumentsToPendingAsync(CancellationToken cancellationToken = default);
 }

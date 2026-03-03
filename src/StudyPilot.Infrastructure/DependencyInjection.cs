@@ -142,6 +142,7 @@ public static class DependencyInjection
 
         services.Configure<BackgroundJobOptions>(config.GetSection(BackgroundJobOptions.SectionName));
         services.AddScoped<IBackgroundJobRepository, BackgroundJobRepository>();
+        services.AddScoped<IRetryFailedDocumentProcessing, RetryFailedDocumentProcessingService>();
         services.AddScoped<IKnowledgeEmbeddingJobRepository, KnowledgeEmbeddingJobRepository>();
         services.AddSingleton<DbBackedBackgroundJobQueue>();
         services.AddSingleton<IBackgroundJobQueue>(sp => sp.GetRequiredService<DbBackedBackgroundJobQueue>());
