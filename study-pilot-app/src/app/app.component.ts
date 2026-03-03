@@ -3,6 +3,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { ToastComponent } from './shared/components/toast/toast.component';
 import { AuthService } from './core/auth/auth.service';
 import { ErrorBannerService } from './core/services/error-banner.service';
+import { NetworkStatusService } from './core/services/network-status.service';
 
 @Component({
   selector: 'app-root',
@@ -10,10 +11,18 @@ import { ErrorBannerService } from './core/services/error-banner.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, ToastComponent],
   template: `
+    @if (!network.isOnline()) {
+      <div class="bg-gray-700 text-white px-4 py-2 text-center text-sm" role="status">You're offline. Some features may be unavailable.</div>
+    }
     @if (banner.currentSystemError(); as sys) {
       <div class="bg-amber-600 text-white px-4 py-3 flex items-center justify-between gap-4 shadow-sm" role="alert">
         <span class="flex-1 min-w-0">{{ sys.message }}@if (sys.correlationId) { <span class="opacity-90 text-sm">(Ref: {{ sys.correlationId }})</span> }</span>
-        <button type="button" (click)="banner.clear()" class="shrink-0 font-medium underline hover:no-underline focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-amber-600 rounded">Dismiss</button>
+        <div class="shrink-0 flex gap-2">
+          @if (sys.onRetry) {
+            <button type="button" (click)="banner.retry()" class="font-medium underline hover:no-underline focus-visible:ring-2 focus-visible:ring-white rounded">Retry</button>
+          }
+          <button type="button" (click)="banner.clear()" class="font-medium underline hover:no-underline focus-visible:ring-2 focus-visible:ring-white rounded">Dismiss</button>
+        </div>
       </div>
     }
     @if (auth.token) {
@@ -48,4 +57,5 @@ import { ErrorBannerService } from './core/services/error-banner.service';
 export class AppComponent {
   readonly auth = inject(AuthService);
   readonly banner = inject(ErrorBannerService);
+  readonly network = inject(NetworkStatusService);
 }

@@ -16,8 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options =>
 {
     var maxBody = builder.Configuration.GetValue<long?>("Kestrel:MaxRequestBodySize");
-    if (maxBody.HasValue && maxBody.Value > 0)
-        options.Limits.MaxRequestBodySize = maxBody.Value;
+    options.Limits.MaxRequestBodySize = maxBody is > 0 ? maxBody.Value : 2 * 1024 * 1024;
     options.AddServerHeader = false;
 });
 
@@ -64,7 +63,7 @@ builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("auth-policy", o =>
     {
-        o.PermitLimit = isDevelopment ? 100 : 10;
+        o.PermitLimit = isDevelopment ? 500 : 10;
         o.Window = TimeSpan.FromMinutes(1);
     });
     options.AddFixedWindowLimiter("upload-policy", o =>
@@ -103,6 +102,7 @@ if (app.Environment.IsProduction())
 app.UseCookiePolicy();
 app.UseSerilogRequestLogging();
 app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<ChaosSimulationMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseApiMiddleware();
 if (app.Environment.IsProduction())

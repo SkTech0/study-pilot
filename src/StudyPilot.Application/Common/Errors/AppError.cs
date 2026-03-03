@@ -7,13 +7,15 @@ public sealed class AppError
     public string? Field { get; }
     public ErrorSeverity Severity { get; }
     public string? CorrelationId { get; }
+    public FailureCategory Category { get; }
 
-    public AppError(string code, string message, string? field, ErrorSeverity severity, string? correlationId = null)
+    public AppError(string code, string message, string? field, ErrorSeverity severity, string? correlationId = null, FailureCategory? category = null)
     {
         Code = code;
         Message = message;
         Field = field;
         Severity = severity;
         CorrelationId = correlationId;
+        Category = category ?? FailureCategory.UnexpectedFailure;
     }
 }

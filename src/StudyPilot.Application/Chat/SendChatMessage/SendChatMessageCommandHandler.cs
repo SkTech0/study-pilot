@@ -1,6 +1,7 @@
 using MediatR;
 using StudyPilot.Application.Abstractions.Knowledge;
 using StudyPilot.Application.Abstractions.Persistence;
+using StudyPilot.Application.Chat.Constants;
 using StudyPilot.Application.Common.Errors;
 using StudyPilot.Application.Common.Models;
 using StudyPilot.Application.Knowledge;
@@ -55,17 +56,21 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
 
     public async Task<Result<SendChatMessageResult>> Handle(SendChatMessageCommand request, CancellationToken cancellationToken)
     {
+        var content = (request.Content ?? "").Trim();
+        if (content.Length > ChatConstants.MaxMessageLength)
+            return Result<SendChatMessageResult>.Failure(new AppError(ErrorCodes.ValidationFailed, "Message exceeds maximum length.", "content", ErrorSeverity.Validation, null, FailureCategory.ValidationFailure));
+
         var session = await _chatSessionRepository.GetByIdAsync(request.SessionId, cancellationToken);
         if (session is null)
             return Result<SendChatMessageResult>.Failure(new AppError(ErrorCodes.ChatSessionNotFound, "Chat session not found.", "sessionId", ErrorSeverity.Business));
         if (session.UserId != request.UserId)
             return Result<SendChatMessageResult>.Failure(new AppError(ErrorCodes.ChatSessionAccessDenied, "You do not have access to this chat session.", "sessionId", ErrorSeverity.Business));
 
-        var userMessage = new ChatMessage(session.Id, ChatRole.User, request.Content.Trim());
+        var userMessage = new ChatMessage(session.Id, ChatRole.User, content);
         await _chatMessageRepository.AddAsync(userMessage, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var queryText = request.Content.Trim();
+        var queryText = content;
         var queryEmbedding = await _embeddingCache.GetAsync(queryText, cancellationToken);
         if (queryEmbedding is null)
         {
@@ -80,7 +85,9 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
 
         if (!HasSufficientContext(retrieved))
         {
-            answerText = RetrievalConstants.InsufficientContextMessage;
+            answerText = retrieved.Count == 0
+                ? RetrievalConstants.InsufficientContextMessage + RetrievalConstants.EmbeddingsDelayedRetryHint
+                : RetrievalConstants.InsufficientContextMessage;
             cited = Array.Empty<Guid>();
         }
         else

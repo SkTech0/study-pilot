@@ -31,6 +31,7 @@ using StudyPilot.Infrastructure.Persistence.Repositories;
 using StudyPilot.Infrastructure.Tutor;
 using StudyPilot.Infrastructure.Storage;
 using StudyPilot.Infrastructure.Knowledge;
+using StudyPilot.Infrastructure.Resilience;
 
 namespace StudyPilot.Infrastructure;
 
@@ -42,7 +43,11 @@ public static class DependencyInjection
             ?? "Host=localhost;Database=StudyPilot;Username=postgres;Password=postgres";
 
         services.AddDbContext<StudyPilotDbContext>(options =>
-            options.UseNpgsql(connectionString, o => o.UseVector())
+            options.UseNpgsql(connectionString, npgsql =>
+            {
+                npgsql.UseVector();
+                npgsql.EnableRetryOnFailure(3, TimeSpan.FromSeconds(2), null);
+            })
                 .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -75,6 +80,7 @@ public static class DependencyInjection
         services.AddScoped<IUsageGuardService, UsageGuardService>();
 
         services.Configure<AIServiceOptions>(config.GetSection(AIServiceOptions.SectionName));
+        services.Configure<ChaosSimulationOptions>(config.GetSection(ChaosSimulationOptions.SectionName));
         services.AddSingleton(sp =>
         {
             var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AIServiceOptions>>().Value;

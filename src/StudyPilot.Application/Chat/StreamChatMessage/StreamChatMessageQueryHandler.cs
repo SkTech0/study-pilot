@@ -3,6 +3,7 @@ using MediatR;
 using StudyPilot.Application.Abstractions.Knowledge;
 using StudyPilot.Application.Abstractions.Observability;
 using StudyPilot.Application.Abstractions.Persistence;
+using StudyPilot.Application.Chat.Constants;
 using StudyPilot.Application.Common.Errors;
 using StudyPilot.Application.Common.Models;
 using StudyPilot.Application.Knowledge;
@@ -60,17 +61,21 @@ public sealed class StreamChatMessageQueryHandler : IRequestHandler<StreamChatMe
 
     public async Task<Result<StreamChatMessageResult>> Handle(StreamChatMessageQuery request, CancellationToken cancellationToken)
     {
+        var message = (request.Message ?? "").Trim();
+        if (message.Length > ChatConstants.MaxMessageLength)
+            return Result<StreamChatMessageResult>.Failure(new AppError(ErrorCodes.ValidationFailed, "Message exceeds maximum length.", "message", ErrorSeverity.Validation, null, FailureCategory.ValidationFailure));
+
         var session = await _chatSessionRepository.GetByIdAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
         if (session is null)
             return Result<StreamChatMessageResult>.Failure(new AppError(ErrorCodes.ChatSessionNotFound, "Chat session not found.", "sessionId", ErrorSeverity.Business));
         if (session.UserId != request.UserId)
             return Result<StreamChatMessageResult>.Failure(new AppError(ErrorCodes.ChatSessionAccessDenied, "You do not have access to this chat session.", "sessionId", ErrorSeverity.Business));
 
-        var userMessage = new ChatMessage(session.Id, ChatRole.User, request.Message.Trim());
+        var userMessage = new ChatMessage(session.Id, ChatRole.User, message);
         await _chatMessageRepository.AddAsync(userMessage, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        var queryText = request.Message.Trim();
+        var queryText = message;
         var queryEmbedding = await _embeddingCache.GetAsync(queryText, cancellationToken).ConfigureAwait(false);
         if (queryEmbedding is null)
         {
@@ -82,7 +87,9 @@ public sealed class StreamChatMessageQueryHandler : IRequestHandler<StreamChatMe
 
         if (!HasSufficientContext(retrieved))
         {
-            var controlledMessage = RetrievalConstants.InsufficientContextMessage;
+            var controlledMessage = retrieved.Count == 0
+                ? RetrievalConstants.InsufficientContextMessage + RetrievalConstants.EmbeddingsDelayedRetryHint
+                : RetrievalConstants.InsufficientContextMessage;
             var guardChannel = Channel.CreateUnbounded<string>();
             guardChannel.Writer.TryWrite(controlledMessage);
             guardChannel.Writer.Complete();

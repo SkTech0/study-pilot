@@ -16,4 +16,8 @@ public static class RetrievalConstants
 
     public const string InsufficientContextMessage =
         "I couldn't find enough information in your documents to answer confidently.";
+
+    /// <summary>Hint when embeddings may be delayed (e.g. document just processed).</summary>
+    public const string EmbeddingsDelayedRetryHint =
+        " If the document was recently uploaded, wait a moment and try again.";
 }

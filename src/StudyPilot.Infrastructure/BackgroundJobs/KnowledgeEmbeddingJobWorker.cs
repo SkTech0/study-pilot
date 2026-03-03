@@ -71,9 +71,10 @@ public sealed class KnowledgeEmbeddingJobWorker : BackgroundService
                 {
                     var allowRetry = job.RetryCount + 1 < maxRetries;
                     var nextRetry = allowRetry ? DateTime.UtcNow.AddSeconds(Math.Pow(2, job.RetryCount) * 5) : (DateTime?)null;
-                    await jobRepository.MarkFailedAsync(job.Id, ex.Message, allowRetry, nextRetry, stoppingToken);
-                    _logger.LogError(ex, "KnowledgeEmbeddingJobFailed JobId={JobId} DocumentId={DocumentId} CorrelationId={CorrelationId} RetryCount={RetryCount}",
-                        job.Id, job.DocumentId, job.CorrelationId, job.RetryCount);
+                    var failureReason = ex.Message?.Length > 1000 ? ex.Message[..1000] : (ex.Message ?? "Unknown error");
+                    await jobRepository.MarkFailedAsync(job.Id, failureReason, allowRetry, nextRetry, stoppingToken);
+                    _logger.LogError(ex, "KnowledgeEmbeddingJobFailed JobId={JobId} DocumentId={DocumentId} CorrelationId={CorrelationId} RetryCount={RetryCount} Poison={Poison}",
+                        job.Id, job.DocumentId, job.CorrelationId, job.RetryCount, !allowRetry);
                 }
             }
             catch (OperationCanceledException)

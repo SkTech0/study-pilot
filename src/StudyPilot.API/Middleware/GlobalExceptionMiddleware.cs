@@ -32,6 +32,7 @@ public sealed class GlobalExceptionMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        var start = DateTime.UtcNow;
         try
         {
             await _next(context);
@@ -44,48 +45,57 @@ public sealed class GlobalExceptionMiddleware
                 f.ErrorMessage,
                 ToCamelCase(f.PropertyName),
                 ErrorSeverity.Validation,
-                correlationId)).ToList();
-            LogError(context, errors[0].Code, ex, correlationId);
+                correlationId,
+                FailureCategory.ValidationFailure)).ToList();
+            LogError(context, errors[0].Code, FailureCategory.ValidationFailure, null, (DateTime.UtcNow - start).TotalMilliseconds, ex, correlationId);
             await WriteErrorResponse(context, (int)HttpStatusCode.BadRequest, errors, correlationId);
         }
         catch (DomainException ex)
         {
             var correlationId = _correlationIdAccessor?.Get();
-            var errors = ex.Errors.Select(e => new AppError(e.Code, e.Message, e.Field, ErrorSeverity.Business, correlationId)).ToList();
-            LogError(context, errors[0].Code, ex, correlationId);
+            var errors = ex.Errors.Select(e => new AppError(e.Code, e.Message, e.Field, ErrorSeverity.Business, correlationId, FailureCategory.ConsistencyFailure)).ToList();
+            LogError(context, errors[0].Code, FailureCategory.ConsistencyFailure, null, (DateTime.UtcNow - start).TotalMilliseconds, ex, correlationId);
             await WriteErrorResponse(context, (int)HttpStatusCode.Conflict, errors, correlationId);
         }
         catch (UnauthorizedAccessException ex)
         {
             var correlationId = _correlationIdAccessor?.Get();
-            var errors = new List<AppError> { new(ErrorCodes.AuthInvalidToken, "Unauthorized.", null, ErrorSeverity.System, correlationId) };
-            LogError(context, ErrorCodes.AuthInvalidToken, ex, correlationId);
+            var errors = new List<AppError> { new(ErrorCodes.AuthInvalidToken, "Unauthorized.", null, ErrorSeverity.System, correlationId, FailureCategory.ValidationFailure) };
+            LogError(context, ErrorCodes.AuthInvalidToken, FailureCategory.ValidationFailure, null, (DateTime.UtcNow - start).TotalMilliseconds, ex, correlationId);
             await WriteErrorResponse(context, (int)HttpStatusCode.Unauthorized, errors, correlationId);
         }
         catch (HttpRequestException ex)
         {
             var correlationId = _correlationIdAccessor?.Get();
-            var errors = new List<AppError> { new(ErrorCodes.AiServiceUnavailable, "AI service is temporarily unavailable.", null, ErrorSeverity.System, correlationId) };
-            LogError(context, ErrorCodes.AiServiceUnavailable, ex, correlationId);
+            var errors = new List<AppError> { new(ErrorCodes.AiServiceUnavailable, "AI service is temporarily unavailable.", null, ErrorSeverity.System, correlationId, FailureCategory.DependencyUnavailable) };
+            LogError(context, ErrorCodes.AiServiceUnavailable, FailureCategory.DependencyUnavailable, "AIService", (DateTime.UtcNow - start).TotalMilliseconds, ex, correlationId);
             await WriteErrorResponse(context, (int)HttpStatusCode.ServiceUnavailable, errors, correlationId);
+        }
+        catch (OperationCanceledException ex)
+        {
+            var correlationId = _correlationIdAccessor?.Get();
+            var errors = new List<AppError> { new(ErrorCodes.UnexpectedError, "Request was cancelled or timed out.", null, ErrorSeverity.System, correlationId, FailureCategory.TimeoutFailure) };
+            LogError(context, "RequestCancelled", FailureCategory.TimeoutFailure, null, (DateTime.UtcNow - start).TotalMilliseconds, ex, correlationId);
+            await WriteErrorResponse(context, 499, errors, correlationId);
         }
         catch (Exception ex)
         {
             var correlationId = _correlationIdAccessor?.Get() ?? "";
-            var message = _env.IsDevelopment()
-                ? $"An unexpected error occurred. ({ex.GetType().Name}) {ex.Message}"
-                : "An unexpected error occurred.";
-            var errors = new List<AppError> { new(ErrorCodes.UnexpectedError, message, null, ErrorSeverity.System, correlationId) };
-            LogError(context, ErrorCodes.UnexpectedError, ex, correlationId);
+            var category = FailureClassifier.Classify(ex);
+            var message = "An unexpected error occurred.";
+            var errors = new List<AppError> { new(ErrorCodes.UnexpectedError, message, null, ErrorSeverity.System, correlationId, category) };
+            LogError(context, ErrorCodes.UnexpectedError, category, null, (DateTime.UtcNow - start).TotalMilliseconds, ex, correlationId);
             await WriteErrorResponse(context, (int)HttpStatusCode.InternalServerError, errors, correlationId);
         }
     }
 
-    private void LogError(HttpContext context, string errorCode, Exception ex, string? correlationId)
+    private void LogError(HttpContext context, string errorCode, FailureCategory category, string? dependencyName, double elapsedMs, Exception ex, string? correlationId)
     {
         var userId = context.User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.User?.FindFirstValue("sub");
-        _logger.LogError(ex, "ErrorCode={ErrorCode} CorrelationId={CorrelationId} UserId={UserId} Path={Path}",
-            errorCode, correlationId ?? "", userId ?? "", context.Request.Path);
+        var operationName = $"{context.Request.Method} {context.Request.Path}";
+        _logger.LogError(ex,
+            "ErrorCode={ErrorCode} FailureCategory={FailureCategory} CorrelationId={CorrelationId} DependencyName={DependencyName} OperationName={OperationName} ElapsedMs={ElapsedMs} UserId={UserId}",
+            errorCode, category, correlationId ?? "", dependencyName ?? "", operationName, elapsedMs, userId ?? "");
     }
 
     private static string? ToCamelCase(string? name)
