@@ -23,3 +23,4 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     llm_max_tokens: int = 1024
     embedding_model: str = "openai/text-embedding-3-small"  # for OpenRouter; use "text-embedding-3-small" for direct OpenAI
+    ollama_embedding_model: str = "nomic-embed-text"  # used when embeddings via Ollama (no OpenRouter/OpenAI key)
