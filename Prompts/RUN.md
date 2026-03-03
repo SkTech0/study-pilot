@@ -159,6 +159,14 @@ To test all functionality without API keys, use **mock AI** (deterministic respo
    ```
    The script checks API and AI health, registers a user, logs in, optionally uploads `scripts/e2e-sample.pdf`, polls for document completion, creates a chat session and sends a message, starts a quiz and submits an answer, starts a tutor session and sends a message, and fetches learning suggestions. Any step that fails (e.g. no sample PDF) is skipped where possible so the rest still runs.
 
+   **To use `ER Modelling.pdf`** (in repo root) instead of the sample PDF:
+   ```bash
+   ./scripts/run-e2e-er-modelling.sh
+   ```
+   Or: `E2E_PDF="ER Modelling.pdf" ./scripts/e2e-mock-test.sh`
+
+   **Tip:** In the Python (AI) terminal you should see `POST /extract-concepts` and `POST /embeddings` when document processing runs. In **Development** (`ASPNETCORE_ENVIRONMENT=Development`), the API processes each upload **synchronously** (inline) so the document is usually **Completed** by the time the upload response returns and the E2E poll succeeds without relying on the background worker.
+
    **Optional:** Install `jq` for more reliable JSON parsing in the script (`brew install jq` on macOS).
 
 3. **Manual mock AI:** To run the AI service in mock mode without `run-local.sh`, set in `study-pilot-ai/.env`:
@@ -166,6 +174,28 @@ To test all functionality without API keys, use **mock AI** (deterministic respo
    AI_MODE=mock
    ```
    Then start the AI service as in step 2 of "Option B" above.
+
+---
+
+## Why the Python service was not being called (root causes)
+
+These were the causes and fixes so that the Python AI service (e.g. `POST /extract-concepts`, `POST /embeddings`) gets invoked:
+
+1. **Background job claim order**  
+   The worker was claiming jobs **oldest first** (`ORDER BY CreatedAtUtc`). With many old (already-processed or failed) jobs in the queue, it kept draining those; the **new** upload’s job was never claimed, so no call to Python.  
+   **Fix:** Claim **newest first** (`ORDER BY CreatedAtUtc DESC`) in `BackgroundJobRepository.TryClaimNextAsync`.
+
+2. **Silent no-op when document not Pending**  
+   For an old job, `TryClaimForProcessingAsync(documentId)` returns `null` (document already Completed/Failed). The handler returned without calling the AI, and the worker still marked the job **Completed**, so the queue never “reached” the new job.  
+   **Fix:** Same as above (newest first). Logging was added for “DocumentNotPendingSkippingJob” so this is visible.
+
+3. **No sync path in Development**  
+   Even with the correct claim order, the worker might not run in time (poll interval, one job per poll, or worker not running). So in E2E the document often stayed **Pending** and the script timed out.  
+   **Fix:** In **Development** (`ASPNETCORE_ENVIRONMENT=Development`), upload runs document processing **synchronously** (inline) after enqueue, so the document is completed before the upload response and Python is called during the request. E2E then sees “Document Completed” and continues; tutor/quiz/learning steps run as intended.
+
+4. **Tutor response validation (Python)**  
+   `POST /tutor/respond` could return 500 because the response model required **`nextStep`** and the mock (or parser) sometimes omitted it.  
+   **Fix:** `TutorResponseOut.next_step` was given a default (`"Complete"`) and the route always passes a fallback, so the response validates and the E2E tutor step succeeds.
 
 ---
 

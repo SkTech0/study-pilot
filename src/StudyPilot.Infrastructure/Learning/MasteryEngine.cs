@@ -25,6 +25,7 @@ public sealed class MasteryEngine : IMasteryEngine
         foreach (var cr in result.ConceptResults)
         {
             var entity = await _masteryRepo.GetByUserAndConceptAsync(result.UserId, cr.ConceptId, cancellationToken).ConfigureAwait(false);
+            var isNew = entity is null;
             if (entity is null)
             {
                 entity = new UserConceptMastery(result.UserId, cr.ConceptId, 50, 0.3);
@@ -34,7 +35,8 @@ public sealed class MasteryEngine : IMasteryEngine
                 entity.ApplyCorrectAnswer(CorrectDelta);
             else
                 entity.ApplyWrongAnswer(WrongDecay);
-            await _masteryRepo.UpdateAsync(entity, cancellationToken).ConfigureAwait(false);
+            if (!isNew)
+                await _masteryRepo.UpdateAsync(entity, cancellationToken).ConfigureAwait(false);
         }
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         StudyPilotMetrics.MasteryUpdates.Add(result.ConceptResults.Count);
@@ -43,6 +45,7 @@ public sealed class MasteryEngine : IMasteryEngine
     public async Task UpdateFromChatInteractionAsync(ChatInteractionForMastery interaction, CancellationToken cancellationToken = default)
     {
         var entity = await _masteryRepo.GetByUserAndConceptAsync(interaction.UserId, interaction.ConceptId, cancellationToken).ConfigureAwait(false);
+        var isNew = entity is null;
         if (entity is null)
         {
             entity = new UserConceptMastery(interaction.UserId, interaction.ConceptId, 50, 0.2);
@@ -50,7 +53,8 @@ public sealed class MasteryEngine : IMasteryEngine
         }
         if (interaction.WasClarification)
             entity.ApplyWrongAnswer(2);
-        await _masteryRepo.UpdateAsync(entity, cancellationToken).ConfigureAwait(false);
+        if (!isNew)
+            await _masteryRepo.UpdateAsync(entity, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         StudyPilotMetrics.MasteryUpdates.Add(1);
     }

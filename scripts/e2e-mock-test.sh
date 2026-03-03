@@ -17,13 +17,14 @@ E2E_PASSWORD="E2eMockPass123!"
 
 echo "=== StudyPilot E2E (Mock AI) ==="
 echo "API: $API_BASE | AI: $AI_BASE"
+echo "Tip: In the Python (AI) terminal you should see POST /extract-concepts and POST /embeddings when document processing runs."
 echo ""
 
 # --- Health ---
 echo "[1/14] Health (API)..."
-curl -sf "$API_BASE/health/ready" -o /dev/null || { echo "API not ready"; exit 1; }
+curl -sf "$API_BASE/health/live" -o /dev/null || { echo "API not reachable"; exit 1; }
 echo "[2/14] Health (AI)..."
-curl -sf "$AI_BASE/health" -o /dev/null || { echo "AI not ready"; exit 1; }
+curl -sf "$AI_BASE/health" -o /dev/null || { echo "AI not reachable"; exit 1; }
 
 # --- Register ---
 echo "[3/14] Register..."
@@ -51,9 +52,12 @@ echo "  Token obtained"
 
 # --- Upload document ---
 echo "[5/14] Upload document..."
-SAMPLE_PDF="$REPO_ROOT/scripts/e2e-sample.pdf"
+# Use E2E_PDF env to override (e.g. E2E_PDF="ER Modelling.pdf" ./scripts/e2e-mock-test.sh)
+SAMPLE_PDF="${E2E_PDF:+$REPO_ROOT/$E2E_PDF}"
+SAMPLE_PDF="${SAMPLE_PDF:-$REPO_ROOT/scripts/e2e-sample.pdf}"
 DOC_ID=""
 if [[ -f "$SAMPLE_PDF" ]]; then
+  echo "  Using PDF: $SAMPLE_PDF"
   UPLOAD_RESP=$(curl -sf -X POST "$API_BASE/documents/upload" \
     -H "Authorization: Bearer $TOKEN" \
     -F "file=@$SAMPLE_PDF;type=application/pdf") || true
@@ -62,7 +66,7 @@ if [[ -f "$SAMPLE_PDF" ]]; then
   fi
   [[ -n "$DOC_ID" ]] && echo "  DocumentId: $DOC_ID" || echo "  Upload failed or no documentId; continuing without doc"
 else
-  echo "  No scripts/e2e-sample.pdf; continuing without upload"
+  echo "  No PDF at $SAMPLE_PDF; continuing without upload"
 fi
 
 # --- Poll document until Completed (mock processing is fast) ---
@@ -120,19 +124,22 @@ if [[ -n "$DOC_ID" ]]; then
   QUIZ_RESP=$(curl -sf -X POST "$API_BASE/quiz/start" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"documentId\":\"$DOC_ID\"}")
+    -d "{\"documentId\":\"$DOC_ID\"}") || QUIZ_RESP=""
   QUIZ_ID=$(echo "$QUIZ_RESP" | sed -n 's/.*"quizId":"\([^"]*\)".*/\1/p')
   if [[ -n "$QUIZ_ID" ]]; then
     echo "[10/14] Get quiz question 0..."
-    Q_RESP=$(curl -sf -H "Authorization: Bearer $TOKEN" "$API_BASE/quiz/$QUIZ_ID/questions/0")
+    Q_RESP=$(curl -sf -H "Authorization: Bearer $TOKEN" "$API_BASE/quiz/$QUIZ_ID/questions/0") || Q_RESP=""
     Q_ID=$(echo "$Q_RESP" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)
     if [[ -n "$Q_ID" ]]; then
       echo "[11/14] Submit quiz..."
-      curl -sf -X POST "$API_BASE/quiz/submit" \
+      if curl -sf -X POST "$API_BASE/quiz/submit" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d "{\"quizId\":\"$QUIZ_ID\",\"answers\":[{\"questionId\":\"$Q_ID\",\"submittedAnswer\":\"Storage\"}]}" > /dev/null
-      echo "  Quiz submitted"
+        -d "{\"quizId\":\"$QUIZ_ID\",\"answers\":[{\"questionId\":\"$Q_ID\",\"submittedAnswer\":\"Storage\"}]}" > /dev/null; then
+        echo "  Quiz submitted"
+      else
+        echo "  Quiz submit failed (continuing)"
+      fi
     fi
   else
     echo "  No quizId (doc may have no concepts yet)"
@@ -143,7 +150,7 @@ else
   echo "[11/14] Skip submit"
 fi
 
-# --- Tutor ---
+# --- Tutor (steps 12–13: start session + respond; Python POST /tutor/respond) ---
 echo "[12/14] Start tutor session..."
 if [[ -n "$DOC_ID" ]]; then
   TUTOR_BODY="{\"documentId\":\"$DOC_ID\"}"
@@ -153,27 +160,33 @@ fi
 TUTOR_START=$(curl -sf -X POST "$API_BASE/tutor/start" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "$TUTOR_BODY")
+  -d "$TUTOR_BODY") || TUTOR_START=""
 TUTOR_SID=$(echo "$TUTOR_START" | sed -n 's/.*"sessionId":"\([^"]*\)".*/\1/p')
 if [[ -n "$TUTOR_SID" ]]; then
   echo "  Tutor sessionId: $TUTOR_SID"
-  echo "[13/14] Tutor respond..."
-  curl -sf -X POST "$API_BASE/tutor/respond" \
+  echo "[13/14] Tutor respond (calls Python POST /tutor/respond)..."
+  TUTOR_RESP=$(curl -sf -w "\n%{http_code}" -X POST "$API_BASE/tutor/respond" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"sessionId\":\"$TUTOR_SID\",\"message\":\"I want to learn variables.\"}" > /dev/null
-  echo "  Tutor respond OK"
+    -d "{\"sessionId\":\"$TUTOR_SID\",\"message\":\"I want to learn variables.\"}") || TUTOR_RESP=$'\n000'
+  TUTOR_HTTP=$(echo "$TUTOR_RESP" | tail -1)
+  if [[ "$TUTOR_HTTP" == "200" ]]; then
+    echo "  Tutor respond OK (200)"
+  else
+    echo "  Tutor respond HTTP $TUTOR_HTTP (body: $(echo "$TUTOR_RESP" | head -1 | cut -c1-80))"
+  fi
 else
-  echo "  Tutor start response: $TUTOR_START"
+  echo "  Tutor start failed or no sessionId; response: ${TUTOR_START:0:120}"
+  echo "[13/14] Skip tutor respond (no session)"
 fi
 
-# --- Learning ---
+# --- Learning suggestions (step 14) ---
 echo "[14/14] Learning suggestions..."
-SUGG=$(curl -sf -H "Authorization: Bearer $TOKEN" "$API_BASE/learning/suggestions")
+SUGG=$(curl -sf -H "Authorization: Bearer $TOKEN" "$API_BASE/learning/suggestions") || SUGG=""
 if echo "$SUGG" | grep -q '"suggestions"'; then
-  echo "  Suggestions OK"
+  echo "  Learning suggestions OK"
 else
-  echo "  Response: $SUGG"
+  echo "  Learning suggestions failed or empty; response: ${SUGG:0:120}"
 fi
 
 echo ""

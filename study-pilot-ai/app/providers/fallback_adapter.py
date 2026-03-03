@@ -1,12 +1,26 @@
 """Multi-LLM fallback adapter: tries providers in order until one succeeds."""
+import asyncio
 import logging
 from typing import AsyncIterator, Sequence
 
+import httpx
 from tenacity import RetryError
 
 from app.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
+
+# When a provider returns 429, wait before trying the next (avoids hammering next provider).
+FALLBACK_DELAY_AFTER_429_SEC = 2.0
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+        return True
+    if isinstance(exc, RetryError) and exc.last_attempt.failed():
+        inner = exc.last_attempt.exception()
+        return inner is not None and _is_rate_limit(inner)
+    return False
 
 
 def _unwrap_error(e: Exception) -> Exception:
@@ -47,6 +61,8 @@ class FallbackAdapter(LLMProvider):
                     last_error,
                     exc_info=False,
                 )
+                if _is_rate_limit(e) and i + 1 < len(self._providers):
+                    await asyncio.sleep(FALLBACK_DELAY_AFTER_429_SEC)
         if last_error:
             raise last_error
         return []
@@ -67,6 +83,8 @@ class FallbackAdapter(LLMProvider):
                     last_error,
                     exc_info=False,
                 )
+                if _is_rate_limit(e) and i + 1 < len(self._providers):
+                    await asyncio.sleep(FALLBACK_DELAY_AFTER_429_SEC)
         if last_error:
             raise last_error
         raise RuntimeError("No LLM providers available for generate_questions")
@@ -93,6 +111,8 @@ class FallbackAdapter(LLMProvider):
                     last_error,
                     exc_info=False,
                 )
+                if _is_rate_limit(e) and i + 1 < len(self._providers):
+                    await asyncio.sleep(FALLBACK_DELAY_AFTER_429_SEC)
         if last_error:
             raise last_error
         raise RuntimeError("No LLM providers available for chat")
@@ -122,6 +142,8 @@ class FallbackAdapter(LLMProvider):
                     last_error,
                     exc_info=False,
                 )
+                if _is_rate_limit(e) and i + 1 < len(self._providers):
+                    await asyncio.sleep(FALLBACK_DELAY_AFTER_429_SEC)
         if last_error:
             raise last_error
         raise RuntimeError("No LLM providers available for stream_chat")

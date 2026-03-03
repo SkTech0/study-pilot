@@ -148,9 +148,10 @@ async def tutor_respond_endpoint(
             expected_answer=ex.get("expectedAnswer") or ex.get("expected_answer") or "",
             difficulty=ex.get("difficulty") or "medium",
         )
+    next_step_val = result.get("nextStep") or getattr(body, "current_step", None) or "Complete"
     return TutorResponseOut(
         message=result.get("message") or "",
-        next_step=result.get("nextStep") or body.current_step,
+        next_step=next_step_val,
         optional_exercise=optional_exercise,
         cited_chunk_ids=result.get("citedChunkIds") or [],
     )

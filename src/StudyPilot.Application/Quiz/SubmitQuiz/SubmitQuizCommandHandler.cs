@@ -118,6 +118,9 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
 
     public async Task<Result<SubmitQuizResult>> Handle(SubmitQuizCommand request, CancellationToken cancellationToken)
     {
+        if (request.Answers is null || request.Answers.Count == 0)
+            return Result<SubmitQuizResult>.Failure(new AppError(ErrorCodes.ValidationFailed, "At least one answer is required.", "Answers", ErrorSeverity.Validation));
+
         var quiz = await _quizRepository.GetByIdAsync(request.QuizId, cancellationToken);
         if (quiz is null)
             return Result<SubmitQuizResult>.Failure(new AppError(ErrorCodes.QuizNotFound, "Quiz not found.", null, ErrorSeverity.Business));
@@ -136,7 +139,7 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
             if (!answersByQuestion.TryGetValue(question.Id, out var answer))
                 continue;
 
-            var optionsList = question.Options.ToList();
+            var optionsList = (question.Options ?? Array.Empty<string>()).ToList();
             var submittedText = answer.SubmittedAnswer ?? "";
             var submittedIndex = answer.SubmittedOptionIndex;
 

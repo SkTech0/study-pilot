@@ -52,19 +52,26 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
             {
 
             var document = await documentRepo.TryClaimForProcessingAsync(documentId, ct);
-            if (document is null) return;
+            if (document is null)
+            {
+                logger.LogWarning("DocumentNotPendingSkippingJob DocumentId={DocumentId} CorrelationId={CorrelationId} (document already Processing/Completed/Failed or missing)",
+                    documentId, correlationId);
+                return;
+            }
 
             var sw = Stopwatch.StartNew();
             logger.LogInformation("DocumentProcessingStarted DocumentId={DocumentId} CorrelationId={CorrelationId}", documentId, correlationId);
 
             try
             {
+                logger.LogInformation("ReadingDocumentFile DocumentId={DocumentId} StoragePath={StoragePath}", documentId, document.StoragePath);
                 var text = await fileReader.ReadAllTextAsync(document.StoragePath, ct);
                 if (text.Length > aiOptions.MaxTextLength)
                 {
                     throw new InvalidOperationException($"Document text length {text.Length} exceeds maximum {aiOptions.MaxTextLength}.");
                 }
 
+                logger.LogInformation("CallingAIExtractConcepts DocumentId={DocumentId} TextLength={TextLength}", documentId, text.Length);
                 var concepts = await aiClient.ExtractConceptsAsync(documentId, text, ct);
                 logger.LogInformation("ConceptExtractionCompleted DocumentId={DocumentId} ConceptCount={Count} ElapsedMilliseconds={Elapsed}",
                     documentId, concepts.Count, sw.ElapsedMilliseconds);

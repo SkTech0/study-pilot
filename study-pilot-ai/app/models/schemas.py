@@ -118,9 +118,9 @@ class TutorExerciseOut(BaseModel):
 
 
 class TutorResponseOut(BaseModel):
-    model_config = ConfigDict(serialize_by_alias=True)
+    model_config = ConfigDict(serialize_by_alias=True, populate_by_name=True)
     message: str
-    next_step: str = Field(..., alias="nextStep")
+    next_step: str = Field(default="Complete", alias="nextStep")
     optional_exercise: TutorExerciseOut | None = Field(None, alias="optionalExercise")
     cited_chunk_ids: list[str] = Field(default_factory=list, alias="citedChunkIds")
 

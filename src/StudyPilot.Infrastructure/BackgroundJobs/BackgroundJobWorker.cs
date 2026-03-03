@@ -73,6 +73,8 @@ public sealed class BackgroundJobWorker : BackgroundService
                     continue;
                 }
 
+                _logger.LogInformation("JobClaimed JobId={JobId} DocumentId={DocumentId} CreatedAtUtc={CreatedAtUtc} CorrelationId={CorrelationId}",
+                    job.Id, job.DocumentId, job.CreatedAtUtc, job.CorrelationId);
                 StudyPilotMetrics.BackgroundJobsTotal.Add(1);
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
                 timeoutCts.CancelAfter(processingTimeout);

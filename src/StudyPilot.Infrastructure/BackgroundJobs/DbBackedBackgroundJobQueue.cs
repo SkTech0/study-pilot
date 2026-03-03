@@ -1,5 +1,6 @@
 using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using StudyPilot.Application.Abstractions.BackgroundJobs;
 using StudyPilot.Infrastructure.Persistence;
 using StudyPilot.Infrastructure.Persistence.Repositories;
@@ -9,10 +10,15 @@ namespace StudyPilot.Infrastructure.BackgroundJobs;
 public sealed class DbBackedBackgroundJobQueue : IBackgroundJobQueue, IBackgroundQueueMetrics
 {
     private readonly IServiceProvider _services;
+    private readonly ILogger<DbBackedBackgroundJobQueue>? _logger;
     private int _pendingCountApprox;
     private long _processedCount;
 
-    public DbBackedBackgroundJobQueue(IServiceProvider services) => _services = services;
+    public DbBackedBackgroundJobQueue(IServiceProvider services, ILogger<DbBackedBackgroundJobQueue>? logger = null)
+    {
+        _services = services;
+        _logger = logger;
+    }
 
     public int QueuedCount => Math.Max(0, _pendingCountApprox);
     public long ProcessedCount => _processedCount;
@@ -36,6 +42,8 @@ public sealed class DbBackedBackgroundJobQueue : IBackgroundJobQueue, IBackgroun
         };
         await repo.AddAsync(job, cancellationToken);
         Interlocked.Increment(ref _pendingCountApprox);
+        _logger?.LogInformation("DocumentProcessingJobEnqueued JobId={JobId} DocumentId={DocumentId} CorrelationId={CorrelationId}",
+            job.Id, documentId, correlationId);
     }
 
     internal void DecrementPendingCount() => Interlocked.Decrement(ref _pendingCountApprox);

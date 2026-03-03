@@ -1,6 +1,7 @@
 using AutoMapper;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using StudyPilot.API.Contracts;
@@ -22,13 +23,15 @@ public sealed class DocumentsController : ControllerBase
     private readonly IFileStorage _fileStorage;
     private readonly IMapper _mapper;
     private readonly ICorrelationIdAccessor? _correlationIdAccessor;
+    private readonly IWebHostEnvironment _env;
 
-    public DocumentsController(IMediator mediator, IFileStorage fileStorage, IMapper mapper, ICorrelationIdAccessor? correlationIdAccessor = null)
+    public DocumentsController(IMediator mediator, IFileStorage fileStorage, IMapper mapper, ICorrelationIdAccessor? correlationIdAccessor, IWebHostEnvironment env)
     {
         _mediator = mediator;
         _fileStorage = fileStorage;
         _mapper = mapper;
         _correlationIdAccessor = correlationIdAccessor;
+        _env = env;
     }
 
     [HttpPost("upload")]
@@ -69,7 +72,8 @@ public sealed class DocumentsController : ControllerBase
 
         stream.Position = 0;
         var storagePath = await _fileStorage.SaveAsync(stream, safeFileName, userId, cancellationToken);
-        var command = new UploadDocumentCommand(userId, safeFileName, storagePath);
+        var processSync = _env.IsDevelopment();
+        var command = new UploadDocumentCommand(userId, safeFileName, storagePath, ProcessSync: processSync);
         var result = await _mediator.Send(command, cancellationToken);
 
         return result.ToActionResult(correlationId, v => _mapper.Map<UploadDocumentResponse>(v));

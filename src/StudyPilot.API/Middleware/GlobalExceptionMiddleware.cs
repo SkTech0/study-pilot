@@ -82,7 +82,9 @@ public sealed class GlobalExceptionMiddleware
         {
             var correlationId = _correlationIdAccessor?.Get() ?? "";
             var category = FailureClassifier.Classify(ex);
-            var message = "An unexpected error occurred.";
+            var message = _env.IsDevelopment()
+                ? (ex.InnerException?.Message ?? ex.Message)
+                : "An unexpected error occurred.";
             var errors = new List<AppError> { new(ErrorCodes.UnexpectedError, message, null, ErrorSeverity.System, correlationId, category) };
             LogError(context, ErrorCodes.UnexpectedError, category, null, (DateTime.UtcNow - start).TotalMilliseconds, ex, correlationId);
             await WriteErrorResponse(context, (int)HttpStatusCode.InternalServerError, errors, correlationId);

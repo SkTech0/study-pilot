@@ -40,7 +40,7 @@ SELECT ""Id"" FROM ""BackgroundJobs""
 WHERE (""Status"" = 'Pending' OR (""Status"" = 'Processing' AND ""ClaimedAtUtc"" < {0}))
 AND (""NextRetryAtUtc"" IS NULL OR ""NextRetryAtUtc"" <= {1})
 AND ""RetryCount"" < {2}
-ORDER BY ""CreatedAtUtc""
+ORDER BY ""CreatedAtUtc"" DESC
 LIMIT 1
 FOR UPDATE SKIP LOCKED", cutoff, now, maxRetries)
                 .ToListAsync(cancellationToken);
