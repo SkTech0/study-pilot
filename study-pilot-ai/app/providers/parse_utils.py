@@ -6,6 +6,28 @@ import re
 logger = logging.getLogger(__name__)
 
 
+def extract_json(raw_response: str) -> str:
+    """Remove markdown fences, locate first '{'/'[' and last '}'/']', return substring. Never triggers second LLM call."""
+    if not raw_response or not raw_response.strip():
+        return "{}"
+    s = raw_response.strip()
+    if s.startswith("```"):
+        lines = s.split("\n")
+        start = 1 if lines[0].lower().find("json") >= 0 else 1
+        end = len(lines) - 1 if (len(lines) > 1 and lines[-1].strip().startswith("```")) else len(lines)
+        s = "\n".join(lines[start:end])
+    s = s.strip()
+    first_obj = s.find("{")
+    last_obj = s.rfind("}")
+    first_arr = s.find("[")
+    last_arr = s.rfind("]")
+    if first_obj >= 0 and last_obj > first_obj:
+        return s[first_obj : last_obj + 1]
+    if first_arr >= 0 and last_arr > first_arr:
+        return s[first_arr : last_arr + 1]
+    return "{}"
+
+
 def _strip_fences(raw: str) -> str:
     raw = raw.strip()
     if raw.startswith("```"):
@@ -48,13 +70,18 @@ def _repair_truncated_json_array(raw: str) -> str | None:
 
 
 def parse_json_array(raw: str) -> list[dict]:
-    raw = _strip_fences(raw)
+    raw = extract_json(raw) or _strip_fences(raw)
     if not raw or not raw.strip():
         logger.warning("LLM returned empty response. Returning empty list.")
         return []
     try:
         out = json.loads(raw)
-        return out if isinstance(out, list) else [out] if isinstance(out, dict) else []
+        if isinstance(out, list):
+            return out
+        if isinstance(out, dict) and "concepts" in out:
+            c = out["concepts"]
+            return c if isinstance(c, list) else []
+        return [out] if isinstance(out, dict) else []
     except json.JSONDecodeError as e:
         repaired = _repair_truncated_json_array(raw)
         if repaired:
@@ -92,33 +119,18 @@ def parse_json_array(raw: str) -> list[dict]:
 
 
 def parse_json_object(raw: str) -> dict:
-    """Legacy JSON object parser used for non-chat flows.
-
-    Returns {} on failure. For chat responses prefer safe_parse_llm_json(), which always
-    normalizes to a stable schema.
-    """
-    raw = _strip_fences(raw)
+    """Tolerant extraction: remove fences, first '{' to last '}', safe deserialize. Returns {} on failure."""
+    json_str = extract_json(raw)
+    if not json_str or json_str == "{}":
+        return {}
     try:
-        out = json.loads(raw)
+        out = json.loads(json_str)
         if isinstance(out, dict):
             return out
         if isinstance(out, list) and out and isinstance(out[0], dict):
             return out[0]
         return {}
-    except json.JSONDecodeError as e:
-        # Best-effort repair: cut at last closing brace
-        s = raw.strip()
-        last = s.rfind("}")
-        if last != -1:
-            candidate = s[: last + 1]
-            try:
-                out = json.loads(candidate)
-                if isinstance(out, dict):
-                    logger.warning("LLM JSON object was truncated; repaired using last brace.")
-                    return out
-            except json.JSONDecodeError:
-                pass
-        logger.warning("Could not parse JSON object from LLM: %s. Returning empty object.", e)
+    except json.JSONDecodeError:
         return {}
 
 

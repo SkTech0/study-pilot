@@ -149,6 +149,11 @@ public static class DependencyInjection
         services.AddSingleton<IBackgroundQueueMetrics>(sp => sp.GetRequiredService<DbBackedBackgroundJobQueue>());
         services.AddSingleton<IDocumentProcessingJobFactory, DocumentProcessingJobFactory>();
         services.AddHostedService<BackgroundJobWorker>();
+        services.Configure<QuizQuestionGenerationJobOptions>(config.GetSection(QuizQuestionGenerationJobOptions.SectionName));
+        services.AddScoped<IQuizQuestionGenerationJobRepository, QuizQuestionGenerationJobRepository>();
+        services.AddSingleton<DbBackedQuizQuestionGenerationJobQueue>();
+        services.AddSingleton<IQuizQuestionGenerationJobQueue>(sp => sp.GetRequiredService<DbBackedQuizQuestionGenerationJobQueue>());
+        services.AddHostedService<QuizQuestionGenerationJobWorker>();
         services.AddSingleton<DbBackedKnowledgeEmbeddingJobQueue>();
         services.AddSingleton<IKnowledgeEmbeddingJobQueue>(sp => sp.GetRequiredService<DbBackedKnowledgeEmbeddingJobQueue>());
         services.AddSingleton<IKnowledgeEmbeddingJobFactory, KnowledgeEmbeddingJobFactory>();

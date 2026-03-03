@@ -1,5 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
-using StudyPilot.Application.Abstractions.AI;
+using StudyPilot.Application.Abstractions.BackgroundJobs;
 using StudyPilot.Application.Abstractions.Observability;
 using StudyPilot.Application.Abstractions.Persistence;
 using StudyPilot.Application.Common.Errors;
@@ -12,24 +11,17 @@ namespace StudyPilot.Application.Quiz.GetQuizQuestion;
 
 public sealed class GetQuizQuestionQueryHandler : IRequestHandler<GetQuizQuestionQuery, Result<GetQuizQuestionResult>>
 {
-    private const int PreloadTimeoutSeconds = 90;
     private readonly IQuizRepository _quizRepository;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly IQuestionGenerationDispatcher _dispatcher;
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IQuizQuestionGenerationJobQueue _quizJobQueue;
     private readonly ICorrelationIdAccessor? _correlationIdAccessor;
 
     public GetQuizQuestionQueryHandler(
         IQuizRepository quizRepository,
-        IUnitOfWork unitOfWork,
-        IQuestionGenerationDispatcher dispatcher,
-        IServiceScopeFactory scopeFactory,
+        IQuizQuestionGenerationJobQueue quizJobQueue,
         ICorrelationIdAccessor? correlationIdAccessor = null)
     {
         _quizRepository = quizRepository;
-        _unitOfWork = unitOfWork;
-        _dispatcher = dispatcher;
-        _scopeFactory = scopeFactory;
+        _quizJobQueue = quizJobQueue;
         _correlationIdAccessor = correlationIdAccessor;
     }
 
@@ -59,52 +51,25 @@ public sealed class GetQuizQuestionQueryHandler : IRequestHandler<GetQuizQuestio
 
         if (weInserted)
         {
-            await _dispatcher.DispatchAsync(request.QuizId, request.QuestionIndex, cancellationToken);
-            question = await _quizRepository.GetQuestionByQuizAndIndexAsync(request.QuizId, request.QuestionIndex, cancellationToken);
+            var jobId = await _quizJobQueue.EnqueueAsync(request.QuizId, request.QuestionIndex, _correlationIdAccessor?.Get(), cancellationToken);
+            return Result<GetQuizQuestionResult>.Success(new GetQuizQuestionResult(question.Id, null, null, QuestionGenerationStatus.Generating, null, jobId));
         }
 
         if (question!.Status == QuestionGenerationStatus.Generating)
-        {
-            var loading = new GetQuizQuestionResult(question.Id, null, null, QuestionGenerationStatus.Generating, null);
-            return Result<GetQuizQuestionResult>.Success(loading);
-        }
+            return Result<GetQuizQuestionResult>.Success(new GetQuizQuestionResult(question.Id, null, null, QuestionGenerationStatus.Generating, null, null));
 
         if (question.Status == QuestionGenerationStatus.Failed)
-        {
-            var failed = new GetQuizQuestionResult(question.Id, null, null, QuestionGenerationStatus.Failed, question.ErrorMessage);
-            return Result<GetQuizQuestionResult>.Success(failed);
-        }
+            return Result<GetQuizQuestionResult>.Success(new GetQuizQuestionResult(question.Id, null, null, QuestionGenerationStatus.Failed, question.ErrorMessage, null));
 
-        var ready = new GetQuizQuestionResult(
+        if (request.QuestionIndex + 1 < quiz.TotalQuestionCount)
+            _ = _quizJobQueue.EnqueueAsync(request.QuizId, request.QuestionIndex + 1, _correlationIdAccessor?.Get(), CancellationToken.None);
+
+        return Result<GetQuizQuestionResult>.Success(new GetQuizQuestionResult(
             question.Id,
             question.Text,
             question.Options.ToList(),
             QuestionGenerationStatus.Ready,
-            null);
-        var result = Result<GetQuizQuestionResult>.Success(ready);
-
-        if (request.QuestionIndex + 1 < quiz.TotalQuestionCount)
-        {
-            var quizId = request.QuizId;
-            var nextIndex = request.QuestionIndex + 1;
-            var correlationId = _correlationIdAccessor?.Get();
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(PreloadTimeoutSeconds));
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await using var scope = _scopeFactory.CreateAsyncScope();
-                    var accessor = scope.ServiceProvider.GetService<ICorrelationIdAccessor>();
-                    if (!string.IsNullOrEmpty(correlationId))
-                        accessor?.Set(correlationId);
-                    var disp = scope.ServiceProvider.GetRequiredService<IQuestionGenerationDispatcher>();
-                    await disp.DispatchAsync(quizId, nextIndex, cts.Token);
-                }
-                catch (OperationCanceledException) { }
-                catch { /* Preload best-effort; avoid unobserved task exceptions */ }
-            }, cts.Token);
-        }
-
-        return result;
+            null,
+            null));
     }
 }

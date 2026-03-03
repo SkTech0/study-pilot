@@ -11,4 +11,5 @@ public sealed record GetQuizQuestionResult(
     string? Text,
     IReadOnlyList<string>? Options,
     QuestionGenerationStatus Status,
-    string? ErrorMessage = null);
+    string? ErrorMessage = null,
+    Guid? JobId = null);

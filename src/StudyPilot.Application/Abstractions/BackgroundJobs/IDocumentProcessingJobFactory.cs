@@ -2,5 +2,5 @@ namespace StudyPilot.Application.Abstractions.BackgroundJobs;
 
 public interface IDocumentProcessingJobFactory
 {
-    Func<CancellationToken, Task> CreateProcessDocumentJob(Guid documentId, string? correlationId = null);
+    Func<CancellationToken, Task> CreateProcessDocumentJob(Guid documentId, string? correlationId = null, Guid? jobId = null);
 }

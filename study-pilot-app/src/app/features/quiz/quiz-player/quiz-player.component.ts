@@ -1,8 +1,10 @@
-import { Component, inject, ChangeDetectionStrategy, signal, computed, OnInit } from '@angular/core';
+import { Component, inject, ChangeDetectionStrategy, signal, computed, OnInit, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
-import { StudyPilotApiService, QuizSession, QuizQuestion, QuizResult } from '@core/services/study-pilot-api.service';
+import { StudyPilotApiService, QuizSession, QuizQuestion, QuizResult, GetQuizQuestionResponse } from '@core/services/study-pilot-api.service';
 import { QuizStateService } from '../quiz-state.service';
+import { QuizPollingService } from '../quiz-polling.service';
 import { EnterpriseApiError } from '@core/http/enterprise-api-error';
 
 @Component({
@@ -66,7 +68,7 @@ import { EnterpriseApiError } from '@core/http/enterprise-api-error';
               <span class="block h-4 bg-gray-100 rounded w-1/2"></span>
               <span class="block h-4 bg-gray-100 rounded w-2/3"></span>
             </div>
-            <p class="mt-4 text-gray-500">{{ isRetrying(currentIndex()) ? 'Retrying…' : 'Preparing your question…' }}</p>
+            <p class="mt-4 text-gray-500">{{ isGenerating(currentIndex()) ? 'Generating question…' : (isRetrying(currentIndex()) ? 'Retrying…' : 'Preparing your question…') }}</p>
           </div>
         } @else if (isFailed(currentIndex())) {
           <div class="card py-8 text-center">
@@ -133,6 +135,8 @@ export class QuizPlayerComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(StudyPilotApiService);
   private readonly state = inject(QuizStateService);
+  private readonly polling = inject(QuizPollingService);
+  private readonly destroyRef = inject(DestroyRef);
   session = this.state.currentSession;
   result = this.state.currentResult;
   startError = signal<string | null>(null);
@@ -140,6 +144,7 @@ export class QuizPlayerComponent implements OnInit {
   selectedIndex = signal<number | null>(null);
   answers = signal<Record<string, number>>({});
   private readonly inFlight = new Set<number>();
+  private readonly generatingIndexes = new Set<number>();
 
   currentQuestion = computed(() => {
     const s = this.session();
@@ -166,6 +171,10 @@ export class QuizPlayerComponent implements OnInit {
 
   isRetrying(index: number): boolean {
     return this.state.loadingIndexesSet().has(index);
+  }
+
+  isGenerating(index: number): boolean {
+    return this.generatingIndexes.has(index);
   }
 
   getFailedMessage(index: number): string {
@@ -211,26 +220,45 @@ export class QuizPlayerComponent implements OnInit {
     if (this.inFlight.has(index)) return;
     this.inFlight.add(index);
     this.state.addLoadingIndex(index);
-    this.api.getQuizQuestion(s.quizId, index).subscribe({
+    this.api.getQuizQuestionResponse(s.quizId, index).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: res => {
-        this.inFlight.delete(index);
-        this.state.removeLoadingIndex(index);
-        const status = (res as { status?: string }).status ?? 'Ready';
-        if (status === 'Ready' && res.text != null && res.options != null) {
-          this.state.setQuestionAt(index, { id: res.id, text: res.text, options: res.options });
-          if (index + 1 < s.totalQuestionCount) this.loadQuestion(index + 1);
-        } else if (status === 'Failed') {
-          this.state.addFailedIndex(index, (res as { errorMessage?: string }).errorMessage ?? res.errorMessage ?? undefined);
-        } else {
-          this.state.addLoadingIndex(index);
+        const body = res.body;
+        const statusCode = res.status;
+        if (statusCode === 202 && body?.status === 'Generating') {
+          this.generatingIndexes.add(index);
+          this.polling.pollQuestion(s.quizId, index).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+            next: r => this.handleQuestionResponse(index, r, s),
+            error: () => this.handleQuestionError(index)
+          });
+          return;
         }
+        if (body) this.handleQuestionResponse(index, body, s);
+        else this.handleQuestionError(index);
       },
-      error: () => {
-        this.inFlight.delete(index);
-        this.state.removeLoadingIndex(index);
-        this.state.addFailedIndex(index, 'Failed to load question.');
-      }
+      error: () => this.handleQuestionError(index)
     });
+  }
+
+  private handleQuestionResponse(index: number, res: GetQuizQuestionResponse, s: NonNullable<QuizSession>): void {
+    this.inFlight.delete(index);
+    this.generatingIndexes.delete(index);
+    this.state.removeLoadingIndex(index);
+    const status = res.status ?? 'Ready';
+    if (status === 'Ready' && res.text != null && res.options != null) {
+      this.state.setQuestionAt(index, { id: res.id, text: res.text, options: res.options });
+      if (index + 1 < s.totalQuestionCount) this.loadQuestion(index + 1);
+    } else if (status === 'Failed') {
+      this.state.addFailedIndex(index, res.errorMessage ?? undefined);
+    } else {
+      this.state.addLoadingIndex(index);
+    }
+  }
+
+  private handleQuestionError(index: number): void {
+    this.inFlight.delete(index);
+    this.generatingIndexes.delete(index);
+    this.state.removeLoadingIndex(index);
+    this.state.addFailedIndex(index, 'Failed to load question.');
   }
 
   retryQuestion(index: number): void {

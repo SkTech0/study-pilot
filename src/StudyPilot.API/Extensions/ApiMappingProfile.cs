@@ -39,7 +39,8 @@ public sealed class ApiMappingProfile : Profile
         CreateMap<StartQuizQuestionSummary, QuizQuestionResponse>();
         CreateMap<StartQuizResult, StartQuizResponse>();
         CreateMap<GetQuizQuestionResult, GetQuizQuestionResponse>()
-            .ForMember(d => d.Status, o => o.MapFrom(s => s.Status.ToString()));
+            .ForMember(d => d.Status, o => o.MapFrom(s => s.Status.ToString()))
+            .ForMember(d => d.JobId, o => o.MapFrom(s => s.JobId));
         CreateMap<QuizAnswerRequest, QuizAnswerInput>();
         CreateMap<SubmitQuizRequest, SubmitQuizCommand>().ForMember(c => c.UserId, o => o.Ignore());
         CreateMap<SubmitQuizResult, SubmitQuizResponse>();

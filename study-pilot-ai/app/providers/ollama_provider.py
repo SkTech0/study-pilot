@@ -27,11 +27,12 @@ class OllamaProvider(LLMProvider):
         self._base_url = base.rstrip("/")
         self._model = settings.ollama_model or "llama3:8b"
         # Use Ollama-specific timeout if set (local models often need >60s for long prompts)
-        timeout = getattr(settings, "ollama_request_timeout", None)
+        timeout = getattr(settings, "llm_timeout_seconds", None) or getattr(settings, "ollama_request_timeout", None)
         self._timeout = (
-            float(timeout) if timeout is not None and float(timeout) > 0 else settings.request_timeout
+            float(timeout) if timeout is not None and float(timeout) > 0 else getattr(settings, "request_timeout", 30.0)
         )
         self._stream = getattr(settings, "ollama_stream", True)
+        self._max_tokens = getattr(settings, "llm_max_tokens", 1024)
         logger.info(
             "Ollama provider configured: base_url=%s model=%s timeout=%.0fs stream=%s",
             self._base_url,
@@ -47,7 +48,7 @@ class OllamaProvider(LLMProvider):
                 "model": self._model,
                 "messages": messages,
                 "stream": False,
-                "options": {"temperature": 0.2},
+                "options": {"temperature": 0.2, "num_predict": self._max_tokens},
             }
             if json_mode and self.supports_json_mode:
                 payload["format"] = "json"

@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using StudyPilot.Application.Abstractions.AI;
 using StudyPilot.Application.Abstractions.Persistence;
@@ -12,7 +10,6 @@ namespace StudyPilot.Infrastructure.AI;
 public sealed class QuestionGenerationDispatcher : IQuestionGenerationDispatcher
 {
     private const int MaxRetries = 3;
-    private static readonly ConcurrentDictionary<(Guid QuizId, int QuestionIndex), SemaphoreSlim> SlotLocks = new();
 
     private readonly IQuizRepository _quizRepository;
     private readonly IConceptRepository _conceptRepository;
@@ -44,16 +41,11 @@ public sealed class QuestionGenerationDispatcher : IQuestionGenerationDispatcher
 
     public async Task DispatchAsync(Guid quizId, int questionIndex, CancellationToken cancellationToken = default)
     {
-        var key = (quizId, questionIndex);
-        var sem = SlotLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-        await sem.WaitAsync(cancellationToken);
-        try
-        {
-            var question = await _quizRepository.GetQuestionByQuizAndIndexAsync(quizId, questionIndex, cancellationToken);
-            if (question is null || question.Status != QuestionGenerationStatus.Generating)
-                return;
+        var question = await _quizRepository.GetQuestionByQuizAndIndexAsync(quizId, questionIndex, cancellationToken);
+        if (question is null || question.Status != QuestionGenerationStatus.Generating)
+            return;
 
-            var quiz = await _quizRepository.GetByIdAsync(quizId, cancellationToken);
+        var quiz = await _quizRepository.GetByIdAsync(quizId, cancellationToken);
         if (quiz is null || questionIndex >= quiz.TotalQuestionCount)
             return;
 
@@ -122,10 +114,5 @@ public sealed class QuestionGenerationDispatcher : IQuestionGenerationDispatcher
         question.MarkFailed(lastException?.Message ?? "Generation failed after retries.");
         await _quizRepository.UpdateQuestionAsync(question, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        finally
-        {
-            sem.Release();
-        }
     }
 }

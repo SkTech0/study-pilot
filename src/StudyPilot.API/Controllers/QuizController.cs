@@ -66,6 +66,8 @@ public sealed class QuizController : ControllerBase
             return unauthorized;
         var query = new GetQuizQuestionQuery(quizId, questionIndex);
         var result = await _mediator.Send(query, cancellationToken);
+        if (result.IsSuccess && result.Value!.Status.ToString() == "Generating" && result.Value.JobId.HasValue)
+            return new ObjectResult(ApiResponse<GetQuizQuestionResponse>.Ok(_mapper.Map<GetQuizQuestionResponse>(result.Value!), _correlationIdAccessor?.Get())) { StatusCode = 202 };
         return result.ToActionResult(_correlationIdAccessor?.Get(), v => _mapper.Map<GetQuizQuestionResponse>(v));
     }
 }

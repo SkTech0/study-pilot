@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { APP_ENVIRONMENT } from '../config/environment.token';
 
@@ -49,6 +49,7 @@ export interface GetQuizQuestionResponse {
   options?: string[] | null;
   status: 'Ready' | 'Generating' | 'Failed';
   errorMessage?: string | null;
+  jobId?: string | null;
 }
 
 export interface SubmitQuizRequest {
@@ -175,6 +176,14 @@ export class StudyPilotApiService {
   }
 
   getQuizQuestion(quizId: string, questionIndex: number): Observable<GetQuizQuestionResponse> {
+    return this.http.get<GetQuizQuestionResponse>(this.url(`quiz/${quizId}/questions/${questionIndex}`));
+  }
+
+  getQuizQuestionResponse(quizId: string, questionIndex: number): Observable<HttpResponse<GetQuizQuestionResponse>> {
+    return this.http.get<GetQuizQuestionResponse>(this.url(`quiz/${quizId}/questions/${questionIndex}`), { observe: 'response' });
+  }
+
+  getQuizStatus(quizId: string, questionIndex: number): Observable<GetQuizQuestionResponse> {
     return this.http.get<GetQuizQuestionResponse>(this.url(`quiz/${quizId}/questions/${questionIndex}`));
   }
 

@@ -28,7 +28,7 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
         return sanitized;
     }
 
-    public Func<CancellationToken, Task> CreateProcessDocumentJob(Guid documentId, string? correlationId = null)
+    public Func<CancellationToken, Task> CreateProcessDocumentJob(Guid documentId, string? correlationId = null, Guid? jobId = null)
     {
         return async (ct) =>
         {
@@ -60,48 +60,43 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
             }
 
             var sw = Stopwatch.StartNew();
-            logger.LogInformation("DocumentProcessingStarted DocumentId={DocumentId} CorrelationId={CorrelationId}", documentId, correlationId);
+            logger.LogInformation("StepComplete DocumentId={DocumentId} JobId={JobId} StepName=extraction_start CorrelationId={CorrelationId}", documentId, jobId, correlationId);
 
             try
             {
-                logger.LogInformation("ReadingDocumentFile DocumentId={DocumentId} StoragePath={StoragePath}", documentId, document.StoragePath);
+                var readSw = Stopwatch.StartNew();
                 var text = await fileReader.ReadAllTextAsync(document.StoragePath, ct);
                 if (text.Length > aiOptions.MaxTextLength)
-                {
                     throw new InvalidOperationException($"Document text length {text.Length} exceeds maximum {aiOptions.MaxTextLength}.");
-                }
+                readSw.Stop();
+                logger.LogInformation("StepComplete DocumentId={DocumentId} StepName=extraction_end DurationMs={DurationMs} CorrelationId={CorrelationId}", documentId, readSw.ElapsedMilliseconds, correlationId);
 
-                logger.LogInformation("CallingAIExtractConcepts DocumentId={DocumentId} TextLength={TextLength}", documentId, text.Length);
                 var concepts = await aiClient.ExtractConceptsAsync(documentId, text, ct);
-                logger.LogInformation("ConceptExtractionCompleted DocumentId={DocumentId} ConceptCount={Count} ElapsedMilliseconds={Elapsed}",
-                    documentId, concepts.Count, sw.ElapsedMilliseconds);
 
+                var persistSw = Stopwatch.StartNew();
                 await conceptRepo.DeleteByDocumentIdAsync(documentId, ct);
                 await unitOfWork.SaveChangesAsync(ct);
-
                 var conceptEntities = concepts.Select(item => new Concept(document.Id, item.Name, item.Description)).ToList();
                 await conceptRepo.AddRangeAsync(conceptEntities, ct);
                 await unitOfWork.SaveChangesAsync(ct);
-
                 document.SetProcessingStatus(ProcessingStatus.Completed);
                 await documentRepo.UpdateAsync(document);
                 await unitOfWork.SaveChangesAsync(ct);
+                persistSw.Stop();
+                logger.LogInformation("StepComplete DocumentId={DocumentId} StepName=persistence_duration_ms DurationMs={DurationMs} CorrelationId={CorrelationId}", documentId, persistSw.ElapsedMilliseconds, correlationId);
 
                 try
                 {
                     await embeddingQueue.EnqueueCreateEmbeddingsAsync(documentId, correlationId, ct);
-                    logger.LogInformation("KnowledgeEmbeddingJobEnqueued DocumentId={DocumentId}", documentId);
                 }
-                catch (Exception enqueueEx)
+                catch (Exception)
                 {
-                    // Failure isolation: document processing remains completed even if embedding job enqueue fails.
-                    logger.LogWarning(enqueueEx, "KnowledgeEmbeddingJobEnqueueFailed DocumentId={DocumentId}", documentId);
+                    logger.LogWarning("StepComplete DocumentId={DocumentId} StepName=embedding_enqueue_failed CorrelationId={CorrelationId}", documentId, correlationId);
                 }
 
                 sw.Stop();
                 StudyPilotMetrics.DocumentsProcessedTotal.Add(1);
-                logger.LogInformation("DocumentProcessingCompleted DocumentId={DocumentId} ElapsedMilliseconds={ElapsedMilliseconds}",
-                    documentId, sw.ElapsedMilliseconds);
+                logger.LogInformation("StepComplete DocumentId={DocumentId} StepName=total_pipeline_duration_ms DurationMs={DurationMs} CorrelationId={CorrelationId}", documentId, sw.ElapsedMilliseconds, correlationId);
             }
             catch (OperationCanceledException)
             {
