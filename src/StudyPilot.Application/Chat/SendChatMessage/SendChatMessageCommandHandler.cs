@@ -3,6 +3,8 @@ using StudyPilot.Application.Abstractions.Knowledge;
 using StudyPilot.Application.Abstractions.Persistence;
 using StudyPilot.Application.Common.Errors;
 using StudyPilot.Application.Common.Models;
+using StudyPilot.Application.Knowledge;
+using StudyPilot.Application.Knowledge.Constants;
 using StudyPilot.Application.Knowledge.Models;
 using StudyPilot.Domain.Entities;
 using StudyPilot.Domain.Enums;
@@ -21,8 +23,11 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
     private readonly IChatMessageCitationRepository _citationRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmbeddingService _embeddingService;
-    private readonly IVectorSearchService _vectorSearch;
+    private readonly IQueryEmbeddingCache _embeddingCache;
+    private readonly IHybridSearchService _hybridSearch;
     private readonly IChatService _chatService;
+    private readonly IUserConceptMasteryRepository _masteryRepository;
+    private readonly IConceptRepository _conceptRepository;
 
     public SendChatMessageCommandHandler(
         IChatSessionRepository chatSessionRepository,
@@ -30,16 +35,22 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
         IChatMessageCitationRepository citationRepository,
         IUnitOfWork unitOfWork,
         IEmbeddingService embeddingService,
-        IVectorSearchService vectorSearch,
-        IChatService chatService)
+        IQueryEmbeddingCache embeddingCache,
+        IHybridSearchService hybridSearch,
+        IChatService chatService,
+        IUserConceptMasteryRepository masteryRepository,
+        IConceptRepository conceptRepository)
     {
         _chatSessionRepository = chatSessionRepository;
         _chatMessageRepository = chatMessageRepository;
         _citationRepository = citationRepository;
         _unitOfWork = unitOfWork;
         _embeddingService = embeddingService;
-        _vectorSearch = vectorSearch;
+        _embeddingCache = embeddingCache;
+        _hybridSearch = hybridSearch;
         _chatService = chatService;
+        _masteryRepository = masteryRepository;
+        _conceptRepository = conceptRepository;
     }
 
     public async Task<Result<SendChatMessageResult>> Handle(SendChatMessageCommand request, CancellationToken cancellationToken)
@@ -54,31 +65,72 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
         await _chatMessageRepository.AddAsync(userMessage, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var queryEmbedding = await _embeddingService.EmbedAsync(request.Content, cancellationToken);
-        var retrieved = await _vectorSearch.SearchAsync(request.UserId, queryEmbedding, session.DocumentId, TopK, cancellationToken);
+        var queryText = request.Content.Trim();
+        var queryEmbedding = await _embeddingCache.GetAsync(queryText, cancellationToken);
+        if (queryEmbedding is null)
+        {
+            queryEmbedding = await _embeddingService.EmbedAsync(queryText, cancellationToken);
+            await _embeddingCache.SetAsync(queryText, queryEmbedding, cancellationToken);
+        }
 
-        var chatRequest = new ChatRequest(
-            request.UserId,
-            session.Id,
-            session.DocumentId,
-            request.Content,
-            retrieved,
-            GroundingSystemInstruction);
+        var retrieved = await _hybridSearch.SearchAsync(request.UserId, queryEmbedding, session.DocumentId, queryText, TopK, cancellationToken);
 
-        var answer = await _chatService.GenerateAnswerAsync(chatRequest, cancellationToken);
-        var assistantMessage = new ChatMessage(session.Id, ChatRole.Assistant, answer.Answer);
+        string answerText;
+        IReadOnlyList<Guid> cited;
+
+        if (!HasSufficientContext(retrieved))
+        {
+            answerText = RetrievalConstants.InsufficientContextMessage;
+            cited = Array.Empty<Guid>();
+        }
+        else
+        {
+            var explanationStyle = await ResolveExplanationStyleAsync(request.UserId, session.DocumentId, cancellationToken);
+            var chatRequest = new ChatRequest(
+                request.UserId,
+                session.Id,
+                session.DocumentId,
+                queryText,
+                retrieved,
+                GroundingSystemInstruction,
+                explanationStyle);
+            var answer = await _chatService.GenerateAnswerAsync(chatRequest, cancellationToken);
+            answerText = answer.Answer;
+            var allowedChunkIds = new HashSet<Guid>(retrieved.Select(c => c.ChunkId));
+            cited = (answer.CitedChunkIds ?? Array.Empty<Guid>()).Where(allowedChunkIds.Contains).Distinct().ToList();
+        }
+
+        var assistantMessage = new ChatMessage(session.Id, ChatRole.Assistant, answerText);
         await _chatMessageRepository.AddAsync(assistantMessage, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        var allowedChunkIds = new HashSet<Guid>(retrieved.Select(c => c.ChunkId));
-        var cited = (answer.CitedChunkIds ?? Array.Empty<Guid>()).Where(allowedChunkIds.Contains).Distinct().ToList();
         if (cited.Count > 0)
         {
             await _citationRepository.AddRangeAsync(assistantMessage.Id, cited, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        return Result<SendChatMessageResult>.Success(new SendChatMessageResult(assistantMessage.Id, answer.Answer, cited));
+        return Result<SendChatMessageResult>.Success(new SendChatMessageResult(assistantMessage.Id, answerText, cited.ToList()));
+    }
+
+    private async Task<ExplanationStyle?> ResolveExplanationStyleAsync(Guid userId, Guid? documentId, CancellationToken cancellationToken)
+    {
+        if (!documentId.HasValue) return null;
+        var concepts = await _conceptRepository.GetByDocumentIdAsync(documentId.Value, cancellationToken);
+        if (concepts.Count == 0) return null;
+        var conceptIds = concepts.Select(c => c.Id).ToList();
+        var masteries = await _masteryRepository.GetByUserAndConceptsAsync(userId, conceptIds, cancellationToken);
+        if (masteries.Count == 0) return null;
+        var avg = masteries.Average(m => m.MasteryScore);
+        return ExplanationStyleResolver.FromAverageMastery(avg);
+    }
+
+    private static bool HasSufficientContext(IReadOnlyList<RetrievedChunk> retrieved)
+    {
+        if (retrieved.Count < RetrievalConstants.MinimumChunksForAnswer)
+            return false;
+        var bestDistance = retrieved.Min(c => c.Score);
+        var similarity = 1.0 - bestDistance;
+        return similarity >= RetrievalConstants.MinimumSimilarityThreshold;
     }
 }
 

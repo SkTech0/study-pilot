@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using StudyPilot.Application.Abstractions.Caching;
+using StudyPilot.Application.Abstractions.Learning;
 using StudyPilot.Application.Abstractions.Persistence;
 using StudyPilot.Application.Common.Errors;
 using StudyPilot.Application.Common.Models;
@@ -95,6 +96,7 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
     private readonly IQuestionConceptLinkRepository _questionConceptLinkRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
+    private readonly IMasteryEngine _masteryEngine;
 
     public SubmitQuizCommandHandler(
         IQuizRepository quizRepository,
@@ -102,7 +104,8 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
         IUserConceptProgressRepository progressRepository,
         IQuestionConceptLinkRepository questionConceptLinkRepository,
         IUnitOfWork unitOfWork,
-        ICacheService cache)
+        ICacheService cache,
+        IMasteryEngine masteryEngine)
     {
         _quizRepository = quizRepository;
         _userAnswerRepository = userAnswerRepository;
@@ -110,6 +113,7 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
         _questionConceptLinkRepository = questionConceptLinkRepository;
         _unitOfWork = unitOfWork;
         _cache = cache;
+        _masteryEngine = masteryEngine;
     }
 
     public async Task<Result<SubmitQuizResult>> Handle(SubmitQuizCommand request, CancellationToken cancellationToken)
@@ -125,6 +129,7 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
 
         var correctCount = 0;
         var questionResults = new List<QuestionResultItem>();
+        var conceptResults = new List<ConceptAnswerResult>();
 
         foreach (var question in questions)
         {
@@ -157,6 +162,9 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
             await _userAnswerRepository.AddAsync(userAnswer, cancellationToken);
 
             var conceptId = await _questionConceptLinkRepository.GetConceptIdForQuestionAsync(question.Id, cancellationToken);
+            if (conceptId is not null)
+                conceptResults.Add(new ConceptAnswerResult(conceptId.Value, isCorrect));
+
             if (conceptId is null) continue;
 
             var progress = await _progressRepository.GetByUserAndConceptAsync(request.UserId, conceptId.Value, cancellationToken);
@@ -177,6 +185,13 @@ public sealed class SubmitQuizCommandHandler : IRequestHandler<SubmitQuizCommand
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (conceptResults.Count > 0)
+        {
+            var masteryResult = new QuizResultForMastery(request.UserId, conceptResults);
+            await _masteryEngine.UpdateFromQuizResultAsync(masteryResult, cancellationToken);
+        }
+
         await _cache.RemoveAsync(WeakTopicsCacheKeyPrefix + request.UserId, cancellationToken);
         return Result<SubmitQuizResult>.Success(new SubmitQuizResult(correctCount, questions.Count, questionResults));
     }

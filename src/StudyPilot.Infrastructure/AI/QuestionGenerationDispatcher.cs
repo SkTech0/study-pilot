@@ -17,6 +17,7 @@ public sealed class QuestionGenerationDispatcher : IQuestionGenerationDispatcher
     private readonly IQuizRepository _quizRepository;
     private readonly IConceptRepository _conceptRepository;
     private readonly IQuestionConceptLinkRepository _questionConceptLinkRepository;
+    private readonly IQuizConceptOrderRepository _quizConceptOrderRepository;
     private readonly IAIService _aiService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly int _retryBaseDelayMs;
@@ -25,6 +26,7 @@ public sealed class QuestionGenerationDispatcher : IQuestionGenerationDispatcher
         IQuizRepository quizRepository,
         IConceptRepository conceptRepository,
         IQuestionConceptLinkRepository questionConceptLinkRepository,
+        IQuizConceptOrderRepository quizConceptOrderRepository,
         IAIService aiService,
         IUnitOfWork unitOfWork,
         IOptions<AIServiceOptions> aiOptions)
@@ -32,6 +34,7 @@ public sealed class QuestionGenerationDispatcher : IQuestionGenerationDispatcher
         _quizRepository = quizRepository;
         _conceptRepository = conceptRepository;
         _questionConceptLinkRepository = questionConceptLinkRepository;
+        _quizConceptOrderRepository = quizConceptOrderRepository;
         _aiService = aiService;
         _unitOfWork = unitOfWork;
         _retryBaseDelayMs = aiOptions.Value.QuestionGenerationRetryBaseDelayMs is > 0 and <= 30_000
@@ -54,16 +57,26 @@ public sealed class QuestionGenerationDispatcher : IQuestionGenerationDispatcher
         if (quiz is null || questionIndex >= quiz.TotalQuestionCount)
             return;
 
-        var concepts = await _conceptRepository.GetByDocumentIdAsync(quiz.DocumentId, cancellationToken);
-        if (questionIndex >= concepts.Count)
+        Concept? concept = null;
+        var orderedIds = await _quizConceptOrderRepository.GetConceptIdsForQuizAsync(quizId, cancellationToken);
+        if (orderedIds.Count > questionIndex)
         {
-            question.MarkFailed("No concept for question index.");
-            await _quizRepository.UpdateQuestionAsync(question, cancellationToken);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return;
+            var conceptId = orderedIds[questionIndex];
+            concept = await _conceptRepository.GetByIdAsync(conceptId, cancellationToken);
+        }
+        if (concept is null)
+        {
+            var concepts = await _conceptRepository.GetByDocumentIdAsync(quiz.DocumentId, cancellationToken);
+            if (questionIndex >= concepts.Count)
+            {
+                question.MarkFailed("No concept for question index.");
+                await _quizRepository.UpdateQuestionAsync(question, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            concept = concepts[questionIndex];
         }
 
-        var concept = concepts[questionIndex];
         var conceptInfo = new ConceptInfo(concept.Id, concept.Name, concept.Description);
 
         Exception? lastException = null;

@@ -22,9 +22,13 @@ using StudyPilot.Infrastructure.BackgroundJobs;
 using StudyPilot.Infrastructure.Logging;
 using StudyPilot.Infrastructure.Persistence;
 using StudyPilot.Infrastructure.Persistence.DbContext;
+using StudyPilot.Application.Abstractions.Learning;
 using StudyPilot.Application.Abstractions.Observability;
+using StudyPilot.Application.Abstractions.Tutor;
 using StudyPilot.Infrastructure.Observability;
+using StudyPilot.Infrastructure.Learning;
 using StudyPilot.Infrastructure.Persistence.Repositories;
+using StudyPilot.Infrastructure.Tutor;
 using StudyPilot.Infrastructure.Storage;
 using StudyPilot.Infrastructure.Knowledge;
 
@@ -53,6 +57,15 @@ public static class DependencyInjection
         services.AddScoped<IQuestionConceptLinkRepository, QuestionConceptLinkRepository>();
         services.AddScoped<IUserAnswerRepository, UserAnswerRepository>();
         services.AddScoped<IUserConceptProgressRepository, UserConceptProgressRepository>();
+        services.AddScoped<IUserConceptMasteryRepository, UserConceptMasteryRepository>();
+        services.AddScoped<ILearningInsightRepository, LearningInsightRepository>();
+        services.AddScoped<IQuizConceptOrderRepository, QuizConceptOrderRepository>();
+        services.AddScoped<ITutorSessionRepository, TutorSessionRepository>();
+        services.AddScoped<ILearningGoalRepository, LearningGoalRepository>();
+        services.AddScoped<ITutorExerciseRepository, TutorExerciseRepository>();
+        services.AddScoped<ITutorMessageRepository, TutorMessageRepository>();
+        services.AddScoped<IMasteryEngine, MasteryEngine>();
+        services.AddScoped<ILearningInsightGenerator, LearningInsightGenerator>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
         services.AddMemoryCache();
@@ -112,7 +125,10 @@ public static class DependencyInjection
 
         services.AddScoped<IEmbeddingService, EmbeddingService>();
         services.AddScoped<IVectorSearchService, PgVectorSearchService>();
+        services.AddScoped<IHybridSearchService, HybridSearchService>();
+        services.AddScoped<IQueryEmbeddingCache, QueryEmbeddingCache>();
         services.AddScoped<IChatService, ChatService>();
+        services.AddScoped<ITutorService, TutorService>();
 
         services.AddSingleton<ICorrelationIdAccessor, CorrelationIdAccessor>();
         services.Configure<StorageOptions>(config.GetSection(StorageOptions.SectionName));
@@ -137,6 +153,7 @@ public static class DependencyInjection
         services.AddSingleton<IWorkerHeartbeat>(sp => sp.GetRequiredService<WorkerHeartbeatStore>());
         services.AddHostedService<WorkerHeartbeatService>();
         services.AddHostedService<LaunchValidationHostedService>();
+        services.AddHostedService<LearningIntelligenceWorker>();
 
         services.AddSingleton<IRequestLogger, SerilogRequestLogger>();
 

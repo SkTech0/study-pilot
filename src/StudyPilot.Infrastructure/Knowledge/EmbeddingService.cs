@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using StudyPilot.Application.Abstractions.Knowledge;
 using StudyPilot.Domain.Entities;
 using StudyPilot.Infrastructure.AI;
+using StudyPilot.Infrastructure.Services;
 
 namespace StudyPilot.Infrastructure.Knowledge;
 
@@ -12,22 +14,40 @@ public sealed class EmbeddingService : IEmbeddingService
 
     public async Task<float[]> EmbedAsync(string text, CancellationToken cancellationToken = default)
     {
-        var list = await EmbedBatchAsync(new[] { text }, cancellationToken);
-        return list.Count > 0 ? list[0] : new float[DocumentChunk.EmbeddingDimensions];
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var list = await EmbedBatchAsync(new[] { text }, cancellationToken);
+            return list.Count > 0 ? list[0] : new float[DocumentChunk.EmbeddingDimensions];
+        }
+        finally
+        {
+            sw.Stop();
+            StudyPilotMetrics.EmbeddingDurationMs.Record(sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<IReadOnlyList<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken = default)
     {
         if (texts.Count == 0) return Array.Empty<float[]>();
-        var result = await _client.CreateEmbeddingsAsync(texts, cancellationToken);
-        if (result.Embeddings.Count != texts.Count)
-            throw new InvalidOperationException($"Embedding count mismatch: expected {texts.Count}, got {result.Embeddings.Count}.");
-        foreach (var emb in result.Embeddings)
+        var sw = Stopwatch.StartNew();
+        try
         {
-            if (emb.Length != DocumentChunk.EmbeddingDimensions)
-                throw new InvalidOperationException($"Embedding dimension mismatch: expected {DocumentChunk.EmbeddingDimensions}, got {emb.Length}.");
+            var result = await _client.CreateEmbeddingsAsync(texts, cancellationToken);
+            if (result.Embeddings.Count != texts.Count)
+                throw new InvalidOperationException($"Embedding count mismatch: expected {texts.Count}, got {result.Embeddings.Count}.");
+            foreach (var emb in result.Embeddings)
+            {
+                if (emb.Length != DocumentChunk.EmbeddingDimensions)
+                    throw new InvalidOperationException($"Embedding dimension mismatch: expected {DocumentChunk.EmbeddingDimensions}, got {emb.Length}.");
+            }
+            return result.Embeddings;
         }
-        return result.Embeddings;
+        finally
+        {
+            sw.Stop();
+            StudyPilotMetrics.EmbeddingDurationMs.Record(sw.ElapsedMilliseconds);
+        }
     }
 }
 

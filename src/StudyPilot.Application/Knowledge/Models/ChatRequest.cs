@@ -6,5 +6,6 @@ public sealed record ChatRequest(
     Guid? DocumentId,
     string Question,
     IReadOnlyList<RetrievedChunk> ContextChunks,
-    string SystemInstruction);
+    string SystemInstruction,
+    ExplanationStyle? ExplanationStyle = null);
 

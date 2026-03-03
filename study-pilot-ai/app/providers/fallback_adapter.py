@@ -1,6 +1,6 @@
 """Multi-LLM fallback adapter: tries providers in order until one succeeds."""
 import logging
-from typing import Sequence
+from typing import AsyncIterator, Sequence
 
 from tenacity import RetryError
 
@@ -71,12 +71,18 @@ class FallbackAdapter(LLMProvider):
             raise last_error
         raise RuntimeError("No LLM providers available for generate_questions")
 
-    async def chat(self, system: str, question: str, context: list[dict]) -> dict:
+    async def chat(
+        self,
+        system: str,
+        question: str,
+        context: list[dict],
+        explanation_style: str | None = None,
+    ) -> dict:
         last_error: Exception | None = None
         for i, provider in enumerate(self._providers):
             name = self._names[i] if i < len(self._names) else f"provider_{i}"
             try:
-                result = await provider.chat(system, question, context)
+                result = await provider.chat(system, question, context, explanation_style)
                 logger.info("LLM chat succeeded with provider=%s", name)
                 return result if isinstance(result, dict) else {}
             except Exception as e:
@@ -90,3 +96,32 @@ class FallbackAdapter(LLMProvider):
         if last_error:
             raise last_error
         raise RuntimeError("No LLM providers available for chat")
+
+    async def stream_chat(
+        self,
+        system: str,
+        question: str,
+        context: list[dict],
+        explanation_style: str | None = None,
+    ) -> AsyncIterator[str]:
+        last_error: Exception | None = None
+        for i, provider in enumerate(self._providers):
+            name = self._names[i] if i < len(self._names) else f"provider_{i}"
+            try:
+                async for token in provider.stream_chat(
+                    system, question, context, explanation_style
+                ):
+                    yield token
+                logger.info("LLM stream_chat succeeded with provider=%s", name)
+                return
+            except Exception as e:
+                last_error = _unwrap_error(e)
+                logger.warning(
+                    "LLM stream_chat failed with provider=%s: %s. Failing over to next provider.",
+                    name,
+                    last_error,
+                    exc_info=False,
+                )
+        if last_error:
+            raise last_error
+        raise RuntimeError("No LLM providers available for stream_chat")

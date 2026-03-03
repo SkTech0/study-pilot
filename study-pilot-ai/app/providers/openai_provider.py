@@ -1,3 +1,4 @@
+import json
 import os
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -46,8 +47,52 @@ class OpenAIProvider(LLMProvider):
         content = await self._chat([{"role": "user", "content": prompt}])
         return parse_json_array(content)
 
-    async def chat(self, system: str, question: str, context: list[dict]) -> dict:
-        prompt = get_chat_prompt(system, question, context)
+    async def chat(
+        self,
+        system: str,
+        question: str,
+        context: list[dict],
+        explanation_style: str | None = None,
+    ) -> dict:
+        prompt = get_chat_prompt(system, question, context, explanation_style)
         content = await self._chat([{"role": "user", "content": prompt}])
         obj = parse_json_object(content)
         return {"answer": obj.get("answer", ""), "citedChunkIds": obj.get("citedChunkIds") or []}
+
+    async def stream_chat(
+        self,
+        system: str,
+        question: str,
+        context: list[dict],
+        explanation_style: str | None = None,
+    ):
+        prompt = get_chat_prompt(system, question, context, explanation_style)
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            r = await client.stream(
+                "POST",
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self._model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.3,
+                    "stream": True,
+                },
+            )
+            r.raise_for_status()
+            async for line in r.aiter_lines():
+                if not line.strip() or line == "data: [DONE]":
+                    continue
+                if line.startswith("data: "):
+                    try:
+                        data = json.loads(line[6:])
+                        for choice in data.get("choices", []):
+                            delta = choice.get("delta", {})
+                            content = delta.get("content")
+                            if isinstance(content, str) and content:
+                                yield content
+                    except json.JSONDecodeError:
+                        continue

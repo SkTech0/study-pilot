@@ -7,4 +7,9 @@ export const CHAT_ROUTES: Routes = [
     loadComponent: () => import('./chat-page/chat-page.component').then(m => m.ChatPageComponent),
     canActivate: [authGuard],
   },
+  {
+    path: 'stream',
+    loadComponent: () => import('./chat-stream/chat-stream.component').then(m => m.ChatStreamComponent),
+    canActivate: [authGuard],
+  },
 ];

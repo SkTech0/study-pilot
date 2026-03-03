@@ -1,7 +1,31 @@
 from __future__ import annotations
 
 
-def get_chat_prompt(system: str, question: str, context: list[dict]) -> str:
+def _style_instruction(style: str | None) -> str:
+    if not style:
+        return ""
+    s = (style or "").strip().lower()
+    if s == "beginner":
+        return (
+            "\nEXPLANATION STYLE: Beginner. Use simple language, step-by-step explanations, "
+            "and analogies. Avoid jargon; define any technical terms if needed.\n"
+        )
+    if s == "intermediate":
+        return (
+            "\nEXPLANATION STYLE: Intermediate. Use clear, structured explanations. "
+            "Some technical terms are fine; briefly clarify when helpful.\n"
+        )
+    if s == "advanced":
+        return (
+            "\nEXPLANATION STYLE: Advanced. Be concise and technical. Minimal explanation; "
+            "assume familiarity with the domain.\n"
+        )
+    return ""
+
+
+def get_chat_prompt(
+    system: str, question: str, context: list[dict], explanation_style: str | None = None
+) -> str:
     """
     Deterministic JSON output contract:
     {
@@ -24,10 +48,12 @@ def get_chat_prompt(system: str, question: str, context: list[dict]) -> str:
 
     sys = (system or "").strip()
     q = (question or "").strip()
+    style_inst = _style_instruction(explanation_style)
 
     return (
         "You are StudyPilot Chat.\n"
-        f"SYSTEM INSTRUCTION:\n{sys}\n\n"
+        f"SYSTEM INSTRUCTION:\n{sys}\n"
+        f"{style_inst}\n"
         "CONTEXT CHUNKS (use these as the ONLY source of truth):\n"
         f"{context_block}\n\n"
         f"QUESTION:\n{q}\n\n"

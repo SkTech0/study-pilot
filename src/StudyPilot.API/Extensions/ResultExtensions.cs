@@ -22,13 +22,17 @@ public static class ResultExtensions
         return new ObjectResult(ApiResponse<TResponse>.Fail(result.Errors, correlationId)) { StatusCode = statusCode };
     }
 
+    public static int GetStatusCodeForError(AppError error) => GetStatusCode(error);
+
     private static int GetStatusCode(AppError error)
     {
         if (error.Code == ErrorCodes.AuthInvalidCredentials || error.Code == ErrorCodes.AuthInvalidToken ||
             error.Code == ErrorCodes.RefreshTokenInvalid)
             return 401;
         if (error.Code == ErrorCodes.ChatSessionAccessDenied) return 403;
-        if (error.Code == ErrorCodes.ChatSessionNotFound) return 404;
+        if (error.Code == ErrorCodes.ChatSessionNotFound || error.Code == ErrorCodes.NotFound) return 404;
+        if (error.Code == ErrorCodes.BusinessRuleViolation) return 409;
+        if (error.Code == ErrorCodes.ValidationError || error.Code == ErrorCodes.ValidationFailed) return 400;
         if (error.Code == ErrorCodes.RateLimitExceeded) return 429;
         if (error.Code == ErrorCodes.AiServiceUnavailable) return 503;
         return error.Severity switch

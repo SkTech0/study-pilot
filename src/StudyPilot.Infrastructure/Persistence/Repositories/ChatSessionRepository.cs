@@ -16,5 +16,26 @@ public sealed class ChatSessionRepository : IChatSessionRepository
 
     public async Task AddAsync(ChatSession session, CancellationToken cancellationToken = default) =>
         await _db.ChatSessions.AddAsync(session, cancellationToken);
+
+    public async Task<int> DeleteStaleSessionsAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default)
+    {
+        var staleIds = await _db.ChatSessions
+            .Where(s => s.UpdatedAtUtc < cutoffUtc)
+            .Select(s => s.Id)
+            .ToListAsync(cancellationToken);
+        if (staleIds.Count == 0) return 0;
+        var messages = await _db.ChatMessages.Where(m => staleIds.Contains(m.SessionId)).ToListAsync(cancellationToken);
+        var msgIds = messages.Select(m => m.Id).ToList();
+        if (msgIds.Count > 0)
+        {
+            var citations = await _db.ChatMessageCitations.Where(c => msgIds.Contains(c.MessageId)).ToListAsync(cancellationToken);
+            _db.ChatMessageCitations.RemoveRange(citations);
+            _db.ChatMessages.RemoveRange(messages);
+        }
+        var sessions = await _db.ChatSessions.Where(s => staleIds.Contains(s.Id)).ToListAsync(cancellationToken);
+        _db.ChatSessions.RemoveRange(sessions);
+        await _db.SaveChangesAsync(cancellationToken);
+        return sessions.Count;
+    }
 }
 

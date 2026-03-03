@@ -10,6 +10,10 @@ using StudyPilot.Application.Chat.SendChatMessage;
 using StudyPilot.Application.Common.Models;
 using StudyPilot.Application.Documents.GetDocuments;
 using StudyPilot.Application.Documents.UploadDocument;
+using StudyPilot.Application.Learning.GetLearningOverview;
+using StudyPilot.Application.Learning.GetLearningProgress;
+using StudyPilot.Application.Learning.GetStudySuggestions;
+using StudyPilot.Application.Learning.GetLearningWeakTopics;
 using StudyPilot.Application.Progress.GetWeakConcepts;
 using StudyPilot.Application.Quiz.StartQuiz;
 using StudyPilot.Application.Auth.Logout;
@@ -48,5 +52,13 @@ public sealed class ApiMappingProfile : Profile
         CreateMap<GetChatHistoryResult, GetChatHistoryResponse>();
         CreateMap<ChatMessageItem, ChatMessageItemResponse>()
             .ForMember(d => d.Role, o => o.MapFrom(s => s.Role.ToString()));
+        CreateMap<LearningOverviewResult, LearningOverviewResponse>();
+        CreateMap<MasteryDistributionItem, MasteryDistributionItemResponse>();
+        CreateMap<LearningWeakTopicsResult, LearningWeakTopicsResponse>();
+        CreateMap<WeakTopicItem, WeakTopicItemResponse>();
+        CreateMap<LearningProgressResult, LearningProgressResponse>();
+        CreateMap<ConceptProgressItem, ConceptProgressItemResponse>();
+        CreateMap<StudySuggestionsResult, StudySuggestionsResponse>();
+        CreateMap<StudySuggestionItem, StudySuggestionItemResponse>();
     }
 }

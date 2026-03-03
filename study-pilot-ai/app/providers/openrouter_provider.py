@@ -70,8 +70,14 @@ class OpenRouterProvider(LLMProvider):
         content = await self._chat([{"role": "user", "content": prompt}])
         return parse_json_array(content)
 
-    async def chat(self, system: str, question: str, context: list[dict]) -> dict:
-        prompt = get_chat_prompt(system, question, context)
+    async def chat(
+        self,
+        system: str,
+        question: str,
+        context: list[dict],
+        explanation_style: str | None = None,
+    ) -> dict:
+        prompt = get_chat_prompt(system, question, context, explanation_style)
         content = await self._chat([{"role": "user", "content": prompt}])
         obj = parse_json_object(content)
         return {"answer": obj.get("answer", ""), "citedChunkIds": obj.get("citedChunkIds") or []}

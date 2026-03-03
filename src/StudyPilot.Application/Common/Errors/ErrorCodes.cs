@@ -28,4 +28,8 @@ public static class ErrorCodes
     public const string ChatSessionNotFound = "CHAT_SESSION_NOT_FOUND";
     public const string ChatSessionAccessDenied = "CHAT_SESSION_ACCESS_DENIED";
     public const string ChatInvalidPageSize = "CHAT_INVALID_PAGE_SIZE";
+
+    public const string NotFound = "NOT_FOUND";
+    public const string BusinessRuleViolation = "BUSINESS_RULE_VIOLATION";
+    public const string ValidationError = "VALIDATION_ERROR";
 }

@@ -3,6 +3,7 @@ using StudyPilot.Domain.Common;
 using StudyPilot.Domain.Entities;
 using StudyPilot.Infrastructure.Persistence;
 using RefreshTokenEntity = StudyPilot.Infrastructure.Persistence.RefreshToken;
+using QuizConceptOrderEntity = StudyPilot.Infrastructure.Persistence.QuizConceptOrder;
 
 namespace StudyPilot.Infrastructure.Persistence.DbContext;
 
@@ -20,6 +21,13 @@ public sealed class StudyPilotDbContext : Microsoft.EntityFrameworkCore.DbContex
     public DbSet<Question> Questions => Set<Question>();
     public DbSet<UserAnswer> UserAnswers => Set<UserAnswer>();
     public DbSet<UserConceptProgress> UserConceptProgresses => Set<UserConceptProgress>();
+    public DbSet<UserConceptMastery> UserConceptMasteries => Set<UserConceptMastery>();
+    public DbSet<LearningInsight> LearningInsights => Set<LearningInsight>();
+    public DbSet<QuizConceptOrderEntity> QuizConceptOrders => Set<QuizConceptOrderEntity>();
+    public DbSet<TutorSession> TutorSessions => Set<TutorSession>();
+    public DbSet<LearningGoal> LearningGoals => Set<LearningGoal>();
+    public DbSet<TutorExercise> TutorExercises => Set<TutorExercise>();
+    public DbSet<TutorMessage> TutorMessages => Set<TutorMessage>();
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
     public DbSet<BackgroundJob> BackgroundJobs => Set<BackgroundJob>();
     public DbSet<KnowledgeEmbeddingJob> KnowledgeEmbeddingJobs => Set<KnowledgeEmbeddingJob>();

@@ -79,6 +79,64 @@ export interface AIHealthResponse {
   status: 'Healthy' | 'Degraded' | 'Unhealthy';
 }
 
+export interface LearningOverview {
+  totalConcepts: number;
+  averageMastery: number;
+  weakCount: number;
+  mediumCount: number;
+  strongCount: number;
+  distribution: { bucket: string; count: number }[];
+}
+
+export interface LearningWeakTopicItem {
+  conceptId: string;
+  conceptName: string;
+  masteryScore: number;
+}
+
+export interface LearningWeakTopicsResponse {
+  topics: LearningWeakTopicItem[];
+}
+
+export interface LearningProgressItem {
+  conceptId: string;
+  name: string;
+  masteryScore: number;
+}
+
+export interface LearningProgressResponse {
+  strongestConcepts: LearningProgressItem[];
+  weakestConcepts: LearningProgressItem[];
+  improvementTrend: number;
+}
+
+export interface StudySuggestionItem {
+  title: string;
+  description: string;
+  documentId?: string | null;
+}
+
+export interface StudySuggestionsResponse {
+  suggestions: StudySuggestionItem[];
+}
+
+export interface StartTutorResponse {
+  sessionId: string;
+  goals: { goalId: string; conceptId: string; conceptName: string; goalType: string; priority: number }[];
+}
+
+export interface TutorRespondResponse {
+  assistantMessage: string;
+  nextStep: string;
+  optionalExercise?: { exerciseId: string; question: string; expectedAnswer: string; difficulty: string } | null;
+  citedChunkIds: string[];
+}
+
+export interface EvaluateExerciseResponse {
+  isCorrect: boolean;
+  explanation: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class StudyPilotApiService {
   private readonly http = inject(HttpClient);
@@ -126,6 +184,34 @@ export class StudyPilotApiService {
 
   getWeakTopics(): Observable<WeakTopic[]> {
     return this.http.get<WeakTopic[]>(this.url('progress/weak-topics'));
+  }
+
+  getLearningOverview(): Observable<LearningOverview> {
+    return this.http.get<LearningOverview>(this.url('learning/overview'));
+  }
+
+  getLearningWeakTopics(maxCount = 20): Observable<LearningWeakTopicsResponse> {
+    return this.http.get<LearningWeakTopicsResponse>(this.url('learning/weak-topics'), { params: { maxCount } });
+  }
+
+  getLearningProgress(): Observable<LearningProgressResponse> {
+    return this.http.get<LearningProgressResponse>(this.url('learning/progress'));
+  }
+
+  getStudySuggestions(): Observable<StudySuggestionsResponse> {
+    return this.http.get<StudySuggestionsResponse>(this.url('learning/suggestions'));
+  }
+
+  startTutorSession(documentId?: string | null): Observable<StartTutorResponse> {
+    return this.http.post<StartTutorResponse>(this.url('tutor/start'), { documentId: documentId ?? null });
+  }
+
+  tutorRespond(sessionId: string, message: string): Observable<TutorRespondResponse> {
+    return this.http.post<TutorRespondResponse>(this.url('tutor/respond'), { sessionId, message });
+  }
+
+  evaluateTutorExercise(exerciseId: string, userAnswer: string): Observable<EvaluateExerciseResponse> {
+    return this.http.post<EvaluateExerciseResponse>(this.url('tutor/evaluate-exercise'), { exerciseId, userAnswer });
   }
 
   getAIHealth(): Observable<AIHealthResponse> {

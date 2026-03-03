@@ -66,10 +66,11 @@ echo "Starting AI service (Python) at http://localhost:8000 ..."
 PIDS+=($!)
 sleep 2
 
-# 2) .NET API - port 5024
+# 2) .NET API - port 5024 (Development so AIService:BaseUrl = http://localhost:8000)
 echo "Starting .NET API at http://localhost:5024 ..."
 (
   cd "$REPO_ROOT"
+  export ASPNETCORE_ENVIRONMENT=Development
   dotnet run --project src/StudyPilot.API/StudyPilot.API.csproj
 ) &
 PIDS+=($!)

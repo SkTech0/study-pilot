@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using StudyPilot.Application.Abstractions.Observability;
@@ -66,6 +67,141 @@ public sealed class StudyPilotKnowledgeAIClient : IStudyPilotKnowledgeAIClient
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<ChatResultDto>(_jsonOptions, ct);
             return result ?? new ChatResultDto();
+        }
+        finally
+        {
+            sw.Stop();
+            StudyPilotMetrics.AIRequestDurationMs.Record(sw.ElapsedMilliseconds);
+        }
+    }
+
+    public async Task<StreamChatResultDto> StreamChatAsync(
+        ChatRequestDto request,
+        Func<string, Task> onToken,
+        CancellationToken ct = default)
+    {
+        var result = new StreamChatResultDto();
+        var content = JsonContent.Create(request, options: _jsonOptions);
+        using var msg = CreateRequest(HttpMethod.Post, "chat/stream", content);
+        using var response = await _httpClient.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+        var buffer = new StringBuilder();
+        var tokenCount = 0L;
+        while (true)
+        {
+            var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+            if (line == null) break;
+            line = line.Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("token", out var tokenProp))
+                {
+                    var token = tokenProp.GetString() ?? "";
+                    if (token.Length > 0)
+                    {
+                        tokenCount++;
+                        await onToken(token).ConfigureAwait(false);
+                    }
+                }
+                else if (root.TryGetProperty("done", out var doneProp) && doneProp.ValueKind == JsonValueKind.True)
+                {
+                    if (root.TryGetProperty("citedChunkIds", out var ids) && ids.ValueKind == JsonValueKind.Array)
+                        foreach (var id in ids.EnumerateArray())
+                            result.CitedChunkIds.Add(id.GetString() ?? "");
+                    if (root.TryGetProperty("model", out var modelProp))
+                        result.Model = modelProp.GetString();
+                    break;
+                }
+            }
+            catch (JsonException) { /* skip malformed line */ }
+        }
+        if (tokenCount > 0)
+            StudyPilotMetrics.TokensGenerated.Add(tokenCount);
+        return result;
+    }
+
+    public async Task<TutorResponseDto> TutorRespondAsync(TutorContextDto request, CancellationToken ct = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var content = JsonContent.Create(request, options: _jsonOptions);
+            using var msg = CreateRequest(HttpMethod.Post, "tutor/respond", content);
+            var response = await _httpClient.SendAsync(msg, ct);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<TutorResponseDto>(_jsonOptions, ct);
+            return result ?? new TutorResponseDto();
+        }
+        finally
+        {
+            sw.Stop();
+            StudyPilotMetrics.AIRequestDurationMs.Record(sw.ElapsedMilliseconds);
+        }
+    }
+
+    public async Task<TutorStreamResultDto> TutorStreamRespondAsync(TutorContextDto request, Func<string, Task> onToken, CancellationToken ct = default)
+    {
+        var result = new TutorStreamResultDto();
+        var content = JsonContent.Create(request, options: _jsonOptions);
+        using var msg = CreateRequest(HttpMethod.Post, "tutor/stream", content);
+        using var response = await _httpClient.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+        while (true)
+        {
+            var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+            if (line == null) break;
+            line = line.Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("token", out var tokenProp))
+                {
+                    var token = tokenProp.GetString() ?? "";
+                    if (token.Length > 0) await onToken(token).ConfigureAwait(false);
+                }
+                else if (root.TryGetProperty("done", out var doneProp) && doneProp.ValueKind == JsonValueKind.True)
+                {
+                    if (root.TryGetProperty("nextStep", out var step)) result.NextStep = step.GetString() ?? "";
+                    if (root.TryGetProperty("optionalExercise", out var ex) && ex.ValueKind == JsonValueKind.Object)
+                    {
+                        result.OptionalExercise = new TutorExerciseDto
+                        {
+                            Question = ex.TryGetProperty("question", out var q) ? q.GetString() ?? "" : "",
+                            ExpectedAnswer = ex.TryGetProperty("expectedAnswer", out var ea) ? ea.GetString() ?? "" : "",
+                            Difficulty = ex.TryGetProperty("difficulty", out var d) ? d.GetString() ?? "medium" : "medium"
+                        };
+                    }
+                    if (root.TryGetProperty("citedChunkIds", out var ids) && ids.ValueKind == JsonValueKind.Array)
+                        foreach (var id in ids.EnumerateArray())
+                            result.CitedChunkIds.Add(id.GetString() ?? "");
+                    break;
+                }
+            }
+            catch (JsonException) { /* skip */ }
+        }
+        return result;
+    }
+
+    public async Task<ExerciseEvaluationResultDto> EvaluateExerciseAsync(ExerciseEvaluationRequestDto request, CancellationToken ct = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var content = JsonContent.Create(request, options: _jsonOptions);
+            using var msg = CreateRequest(HttpMethod.Post, "tutor/evaluate-exercise", content);
+            var response = await _httpClient.SendAsync(msg, ct);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<ExerciseEvaluationResultDto>(_jsonOptions, ct);
+            return result ?? new ExerciseEvaluationResultDto();
         }
         finally
         {

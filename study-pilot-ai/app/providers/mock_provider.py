@@ -26,7 +26,13 @@ class MockProvider(LLMProvider):
         ]
         return questions[:n]
 
-    async def chat(self, system: str, question: str, context: list[dict]) -> dict:
+    async def chat(
+        self,
+        system: str,
+        question: str,
+        context: list[dict],
+        explanation_style: str | None = None,
+    ) -> dict:
         return {
             "answer": "This is a mock chat response. Enable a real LLM provider for RAG answers.",
             "citedChunkIds": [],

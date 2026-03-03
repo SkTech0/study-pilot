@@ -20,6 +20,9 @@ import { StudyPilotApiService, DocumentItem, WeakTopic } from '@core/services/st
             <a routerLink="/documents/upload" class="btn-primary text-center">Upload a PDF</a>
             <a routerLink="/documents" class="btn-secondary text-center">My documents &amp; quizzes</a>
             <a routerLink="/chat" class="btn-secondary text-center">Chat (RAG)</a>
+            <a routerLink="/chat/stream" class="btn-secondary text-center">Chat (Stream)</a>
+            <a routerLink="/learning" class="btn-secondary text-center">Learning dashboard</a>
+            <a routerLink="/tutor" class="btn-secondary text-center">Start tutor session</a>
           </div>
         </div>
         <div class="card">
