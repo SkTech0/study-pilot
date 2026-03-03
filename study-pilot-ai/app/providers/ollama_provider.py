@@ -2,7 +2,7 @@ import json
 import logging
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from app.core.config import Settings
 from app.prompts import (
@@ -41,7 +41,7 @@ class OllamaProvider(LLMProvider):
             self._stream,
         )
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
+    @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, max=10))
     async def _chat(self, messages: list[dict], *, json_mode: bool = False) -> str:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             payload: dict = {

@@ -1,4 +1,6 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using StudyPilot.Application.Abstractions.Persistence;
 using StudyPilot.Domain.Entities;
 using StudyPilot.Domain.Enums;
@@ -35,11 +37,25 @@ public sealed class DocumentRepository : IDocumentRepository
 
     public async Task<Document?> TryClaimForProcessingAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var updated = await _db.Documents
-            .Where(d => d.Id == documentId && d.ProcessingStatus == ProcessingStatus.Pending)
-            .ExecuteUpdateAsync(s => s.SetProperty(d => d.ProcessingStatus, ProcessingStatus.Processing), cancellationToken);
-        if (updated == 0) return null;
-        return await _db.Documents.FirstOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+        var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
+        if (conn.State != ConnectionState.Open)
+            await conn.OpenAsync(cancellationToken);
+        const string sql = @"UPDATE ""Documents"" SET ""ProcessingStatus"" = 'Processing' WHERE ""Id"" = @id AND ""ProcessingStatus"" = 'Pending' RETURNING ""Id"", ""UserId"", ""FileName"", ""StoragePath"", ""ProcessingStatus"", ""CreatedAtUtc"", ""UpdatedAtUtc"", ""FailureReason""";
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("id", documentId);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+        var statusStr = reader.GetString(4);
+        var status = Enum.Parse<ProcessingStatus>(statusStr);
+        return new Document(
+            reader.GetGuid(0),
+            reader.GetGuid(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            status,
+            reader.GetDateTime(5),
+            reader.GetDateTime(6),
+            reader.IsDBNull(7) ? null : reader.GetString(7));
     }
 
     public async Task ResetToPendingAsync(Guid documentId, CancellationToken cancellationToken = default)

@@ -35,4 +35,26 @@ public static class JsonExtractor
             return null;
         }
     }
+
+    public static JsonExtractResult<T> TryDeserialize<T>(string rawResponse, JsonSerializerOptions? options = null) where T : class
+    {
+        var json = ExtractJson(rawResponse);
+        try
+        {
+            var value = JsonSerializer.Deserialize<T>(json, options);
+            return new JsonExtractResult<T>(true, value, null);
+        }
+        catch (JsonException ex)
+        {
+            return new JsonExtractResult<T>(false, null, ex.Message);
+        }
+    }
+}
+
+public readonly struct JsonExtractResult<T> where T : class
+{
+    public bool Success { get; }
+    public T? Value { get; }
+    public string? ParseError { get; }
+    internal JsonExtractResult(bool success, T? value, string? parseError) { Success = success; Value = value; ParseError = parseError; }
 }

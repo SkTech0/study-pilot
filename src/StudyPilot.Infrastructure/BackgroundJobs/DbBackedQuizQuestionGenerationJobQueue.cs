@@ -11,6 +11,10 @@ public sealed class DbBackedQuizQuestionGenerationJobQueue : IQuizQuestionGenera
 {
     private readonly IServiceProvider _services;
     private readonly ILogger<DbBackedQuizQuestionGenerationJobQueue>? _logger;
+    private volatile int _pendingCountFromDb = -1;
+
+    public int CachedPendingCount => _pendingCountFromDb >= 0 ? _pendingCountFromDb : 0;
+    internal void SetPendingCountFromDb(int count) => _pendingCountFromDb = count;
 
     public DbBackedQuizQuestionGenerationJobQueue(IServiceProvider services, ILogger<DbBackedQuizQuestionGenerationJobQueue>? logger = null)
     {
@@ -48,4 +52,5 @@ public sealed class QuizQuestionGenerationJobOptions
     public int PollIntervalSeconds { get; set; } = 3;
     public int ProcessingTimeoutMinutes { get; set; } = 5;
     public int MaxRetries { get; set; } = 1;
+    public int LlmTimeoutSeconds { get; set; } = 30;
 }

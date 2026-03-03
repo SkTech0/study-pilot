@@ -28,7 +28,6 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
     private readonly IHybridSearchService _hybridSearch;
     private readonly IChatService _chatService;
     private readonly IUserConceptMasteryRepository _masteryRepository;
-    private readonly IConceptRepository _conceptRepository;
 
     public SendChatMessageCommandHandler(
         IChatSessionRepository chatSessionRepository,
@@ -39,8 +38,7 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
         IQueryEmbeddingCache embeddingCache,
         IHybridSearchService hybridSearch,
         IChatService chatService,
-        IUserConceptMasteryRepository masteryRepository,
-        IConceptRepository conceptRepository)
+        IUserConceptMasteryRepository masteryRepository)
     {
         _chatSessionRepository = chatSessionRepository;
         _chatMessageRepository = chatMessageRepository;
@@ -51,7 +49,6 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
         _hybridSearch = hybridSearch;
         _chatService = chatService;
         _masteryRepository = masteryRepository;
-        _conceptRepository = conceptRepository;
     }
 
     public async Task<Result<SendChatMessageResult>> Handle(SendChatMessageCommand request, CancellationToken cancellationToken)
@@ -68,7 +65,6 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
 
         var userMessage = new ChatMessage(session.Id, ChatRole.User, content);
         await _chatMessageRepository.AddAsync(userMessage, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var queryText = content;
         var queryEmbedding = await _embeddingCache.GetAsync(queryText, cancellationToken);
@@ -109,12 +105,9 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
 
         var assistantMessage = new ChatMessage(session.Id, ChatRole.Assistant, answerText);
         await _chatMessageRepository.AddAsync(assistantMessage, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
         if (cited.Count > 0)
-        {
             await _citationRepository.AddRangeAsync(assistantMessage.Id, cited, cancellationToken);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<SendChatMessageResult>.Success(new SendChatMessageResult(assistantMessage.Id, answerText, cited.ToList()));
     }
@@ -122,10 +115,7 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
     private async Task<ExplanationStyle?> ResolveExplanationStyleAsync(Guid userId, Guid? documentId, CancellationToken cancellationToken)
     {
         if (!documentId.HasValue) return null;
-        var concepts = await _conceptRepository.GetByDocumentIdAsync(documentId.Value, cancellationToken);
-        if (concepts.Count == 0) return null;
-        var conceptIds = concepts.Select(c => c.Id).ToList();
-        var masteries = await _masteryRepository.GetByUserAndConceptsAsync(userId, conceptIds, cancellationToken);
+        var masteries = await _masteryRepository.GetByUserAndDocumentAsync(userId, documentId.Value, cancellationToken);
         if (masteries.Count == 0) return null;
         var avg = masteries.Average(m => m.MasteryScore);
         return ExplanationStyleResolver.FromAverageMastery(avg);

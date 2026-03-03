@@ -93,6 +93,8 @@ StartupConfigurationValidator.Validate(builder.Configuration);
 var app = builder.Build();
 
 StudyPilotMetrics.SetQueueLengthProvider(() => app.Services.GetRequiredService<IBackgroundQueueMetrics>().QueuedCount);
+StudyPilotMetrics.SetQuizQueueLengthProvider(() => app.Services.GetRequiredService<DbBackedQuizQuestionGenerationJobQueue>().CachedPendingCount);
+StudyPilotMetrics.SetEmbeddingQueueLengthProvider(() => app.Services.GetRequiredService<DbBackedKnowledgeEmbeddingJobQueue>().CachedPendingCount);
 
 app.UseForwardedHeaders();
 app.UseCors();

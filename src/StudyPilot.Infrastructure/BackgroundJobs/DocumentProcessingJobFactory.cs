@@ -32,7 +32,7 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
     {
         return async (ct) =>
         {
-            using var scope = _services.CreateScope();
+            await using var scope = _services.CreateAsyncScope();
             var documentRepo = scope.ServiceProvider.GetRequiredService<IDocumentRepository>();
             var conceptRepo = scope.ServiceProvider.GetRequiredService<IConceptRepository>();
             var embeddingQueue = scope.ServiceProvider.GetRequiredService<IKnowledgeEmbeddingJobQueue>();
@@ -75,10 +75,8 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
 
                 var persistSw = Stopwatch.StartNew();
                 await conceptRepo.DeleteByDocumentIdAsync(documentId, ct);
-                await unitOfWork.SaveChangesAsync(ct);
                 var conceptEntities = concepts.Select(item => new Concept(document.Id, item.Name, item.Description)).ToList();
                 await conceptRepo.AddRangeAsync(conceptEntities, ct);
-                await unitOfWork.SaveChangesAsync(ct);
                 document.SetProcessingStatus(ProcessingStatus.Completed);
                 await documentRepo.UpdateAsync(document);
                 await unitOfWork.SaveChangesAsync(ct);
@@ -106,7 +104,7 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
                 {
                     document.SetProcessingStatus(ProcessingStatus.Failed, "Processing was cancelled.");
                     await documentRepo.UpdateAsync(document);
-                    await unitOfWork.SaveChangesAsync(CancellationToken.None);
+                    await unitOfWork.SaveChangesAsync(ct);
                 }
                 catch { }
             }
@@ -120,7 +118,7 @@ public sealed class DocumentProcessingJobFactory : IDocumentProcessingJobFactory
                     var reason = SanitizeFailureReason(ex.Message, MaxFailureReasonLength);
                     document.SetProcessingStatus(ProcessingStatus.Failed, reason);
                     await documentRepo.UpdateAsync(document);
-                    await unitOfWork.SaveChangesAsync(CancellationToken.None);
+                    await unitOfWork.SaveChangesAsync(ct);
                 }
                 catch { }
             }

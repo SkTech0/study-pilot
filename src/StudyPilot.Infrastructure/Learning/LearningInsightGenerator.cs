@@ -33,8 +33,7 @@ public sealed class LearningInsightGenerator : ILearningInsightGenerator
         var since = DateTime.UtcNow - InsightCooldown;
         var userIds = await _masteryRepository.GetDistinctUserIdsAsync(cancellationToken);
         if (userIds.Count == 0) return;
-        var insights = new List<LearningInsight>();
-
+        var candidates = new List<(Guid userId, Guid conceptId, LearningInsightType type)>();
         foreach (var userId in userIds)
         {
             var list = await _masteryRepository.GetByUserIdAsync(userId, cancellationToken);
@@ -44,23 +43,21 @@ public sealed class LearningInsightGenerator : ILearningInsightGenerator
                 {
                     var accuracy = (double)m.CorrectAnswers / m.Attempts;
                     if (accuracy < LowAccuracyThreshold)
-                    {
-                        var exists = await _insightRepository.ExistsAsync(userId, m.ConceptId, LearningInsightType.RepeatedMistake, since, cancellationToken);
-                        if (!exists)
-                        {
-                            insights.Add(new LearningInsight(userId, m.ConceptId, LearningInsightType.RepeatedMistake, InsightSourceType.Quiz, 0.8));
-                        }
-                    }
+                        candidates.Add((userId, m.ConceptId, LearningInsightType.RepeatedMistake));
                     else if (accuracy >= HighAccuracyThreshold && m.Attempts >= MinAttemptsForImprovement)
-                    {
-                        var exists = await _insightRepository.ExistsAsync(userId, m.ConceptId, LearningInsightType.Improvement, since, cancellationToken);
-                        if (!exists)
-                        {
-                            insights.Add(new LearningInsight(userId, m.ConceptId, LearningInsightType.Improvement, InsightSourceType.Quiz, 0.7));
-                        }
-                    }
+                        candidates.Add((userId, m.ConceptId, LearningInsightType.Improvement));
                 }
             }
+        }
+        if (candidates.Count == 0) return;
+        var keys = candidates.Select(c => (c.userId, c.conceptId)).Distinct().ToList();
+        var existing = await _insightRepository.GetExistingKeysAsync(keys, since, cancellationToken);
+        var insights = new List<LearningInsight>();
+        var added = new HashSet<(Guid, Guid, LearningInsightType)>();
+        foreach (var (userId, conceptId, type) in candidates)
+        {
+            if (existing.Contains((userId, conceptId, type)) || !added.Add((userId, conceptId, type))) continue;
+            insights.Add(new LearningInsight(userId, conceptId, type, InsightSourceType.Quiz, type == LearningInsightType.RepeatedMistake ? 0.8 : 0.7));
         }
 
         if (insights.Count > 0)

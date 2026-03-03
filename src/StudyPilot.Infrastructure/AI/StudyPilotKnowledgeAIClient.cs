@@ -54,15 +54,18 @@ public sealed class StudyPilotKnowledgeAIClient : IStudyPilotKnowledgeAIClient
     public async Task<EmbeddingsResultDto> CreateEmbeddingsAsync(IReadOnlyList<string> texts, CancellationToken ct = default)
     {
         await ApplyChaosAsync(ct).ConfigureAwait(false);
+        var timeoutMs = _options.LlmTimeoutSeconds > 0 ? _options.LlmTimeoutSeconds * 1000 : 120_000;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeoutMs);
         var sw = Stopwatch.StartNew();
         try
         {
             var request = new { texts };
             var content = JsonContent.Create(request, options: _jsonOptions);
             using var msg = CreateRequest(HttpMethod.Post, "embeddings", content);
-            var response = await _httpClient.SendAsync(msg, ct);
+            var response = await _httpClient.SendAsync(msg, cts.Token);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<EmbeddingsResultDto>(_jsonOptions, ct);
+            var result = await response.Content.ReadFromJsonAsync<EmbeddingsResultDto>(_jsonOptions, cts.Token);
             return result ?? new EmbeddingsResultDto();
         }
         catch (Exception ex)
@@ -73,21 +76,24 @@ public sealed class StudyPilotKnowledgeAIClient : IStudyPilotKnowledgeAIClient
         finally
         {
             sw.Stop();
-            StudyPilotMetrics.AIRequestDurationMs.Record(sw.ElapsedMilliseconds);
+            StudyPilotMetrics.RecordAIDuration("embeddings", sw.ElapsedMilliseconds);
         }
     }
 
     public async Task<ChatResultDto> ChatAsync(ChatRequestDto request, CancellationToken ct = default)
     {
         await ApplyChaosAsync(ct).ConfigureAwait(false);
+        var timeoutMs = _options.LlmTimeoutSeconds > 0 ? _options.LlmTimeoutSeconds * 1000 : 120_000;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeoutMs);
         var sw = Stopwatch.StartNew();
         try
         {
             var content = JsonContent.Create(request, options: _jsonOptions);
             using var msg = CreateRequest(HttpMethod.Post, "chat", content);
-            var response = await _httpClient.SendAsync(msg, ct);
+            var response = await _httpClient.SendAsync(msg, cts.Token);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<ChatResultDto>(_jsonOptions, ct);
+            var result = await response.Content.ReadFromJsonAsync<ChatResultDto>(_jsonOptions, cts.Token);
             return result ?? new ChatResultDto();
         }
         catch (Exception ex)
@@ -98,7 +104,7 @@ public sealed class StudyPilotKnowledgeAIClient : IStudyPilotKnowledgeAIClient
         finally
         {
             sw.Stop();
-            StudyPilotMetrics.AIRequestDurationMs.Record(sw.ElapsedMilliseconds);
+            StudyPilotMetrics.RecordAIDuration("chat", sw.ElapsedMilliseconds);
         }
     }
 
@@ -108,21 +114,24 @@ public sealed class StudyPilotKnowledgeAIClient : IStudyPilotKnowledgeAIClient
         CancellationToken ct = default)
     {
         await ApplyChaosAsync(ct).ConfigureAwait(false);
+        var timeoutMs = _options.LlmTimeoutSeconds > 0 ? _options.LlmTimeoutSeconds * 1000 : 120_000;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeoutMs);
         var sw = Stopwatch.StartNew();
         var result = new StreamChatResultDto();
         try
         {
             var content = JsonContent.Create(request, options: _jsonOptions);
             using var msg = CreateRequest(HttpMethod.Post, "chat/stream", content);
-            using var response = await _httpClient.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            using var response = await _httpClient.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token).ConfigureAwait(false);
             using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
             var buffer = new StringBuilder();
             var tokenCount = 0L;
             while (true)
             {
-                var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+                var line = await reader.ReadLineAsync(cts.Token).ConfigureAwait(false);
                 if (line == null) break;
                 line = line.Trim();
                 if (string.IsNullOrEmpty(line)) continue;
@@ -163,20 +172,24 @@ public sealed class StudyPilotKnowledgeAIClient : IStudyPilotKnowledgeAIClient
         finally
         {
             sw.Stop();
+            StudyPilotMetrics.RecordAIDuration("chat_stream", sw.ElapsedMilliseconds);
         }
     }
 
     public async Task<TutorResponseDto> TutorRespondAsync(TutorContextDto request, CancellationToken ct = default)
     {
         await ApplyChaosAsync(ct).ConfigureAwait(false);
+        var timeoutMs = _options.LlmTimeoutSeconds > 0 ? _options.LlmTimeoutSeconds * 1000 : 120_000;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeoutMs);
         var sw = Stopwatch.StartNew();
         try
         {
             var content = JsonContent.Create(request, options: _jsonOptions);
             using var msg = CreateRequest(HttpMethod.Post, "tutor/respond", content);
-            var response = await _httpClient.SendAsync(msg, ct);
+            var response = await _httpClient.SendAsync(msg, cts.Token);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<TutorResponseDto>(_jsonOptions, ct);
+            var result = await response.Content.ReadFromJsonAsync<TutorResponseDto>(_jsonOptions, cts.Token);
             return result ?? new TutorResponseDto();
         }
         catch (Exception ex)
@@ -187,26 +200,29 @@ public sealed class StudyPilotKnowledgeAIClient : IStudyPilotKnowledgeAIClient
         finally
         {
             sw.Stop();
-            StudyPilotMetrics.AIRequestDurationMs.Record(sw.ElapsedMilliseconds);
+            StudyPilotMetrics.RecordAIDuration("tutor_respond", sw.ElapsedMilliseconds);
         }
     }
 
     public async Task<TutorStreamResultDto> TutorStreamRespondAsync(TutorContextDto request, Func<string, Task> onToken, CancellationToken ct = default)
     {
         await ApplyChaosAsync(ct).ConfigureAwait(false);
+        var timeoutMs = _options.LlmTimeoutSeconds > 0 ? _options.LlmTimeoutSeconds * 1000 : 120_000;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeoutMs);
         var sw = Stopwatch.StartNew();
         var result = new TutorStreamResultDto();
         try
         {
             var content = JsonContent.Create(request, options: _jsonOptions);
             using var msg = CreateRequest(HttpMethod.Post, "tutor/stream", content);
-            using var response = await _httpClient.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            using var response = await _httpClient.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token).ConfigureAwait(false);
             using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
             while (true)
             {
-                var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+                var line = await reader.ReadLineAsync(cts.Token).ConfigureAwait(false);
                 if (line == null) break;
                 line = line.Trim();
                 if (string.IsNullOrEmpty(line)) continue;
@@ -249,20 +265,24 @@ public sealed class StudyPilotKnowledgeAIClient : IStudyPilotKnowledgeAIClient
         finally
         {
             sw.Stop();
+            StudyPilotMetrics.RecordAIDuration("tutor_stream", sw.ElapsedMilliseconds);
         }
     }
 
     public async Task<ExerciseEvaluationResultDto> EvaluateExerciseAsync(ExerciseEvaluationRequestDto request, CancellationToken ct = default)
     {
         await ApplyChaosAsync(ct).ConfigureAwait(false);
+        var timeoutMs = _options.LlmTimeoutSeconds > 0 ? _options.LlmTimeoutSeconds * 1000 : 120_000;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeoutMs);
         var sw = Stopwatch.StartNew();
         try
         {
             var content = JsonContent.Create(request, options: _jsonOptions);
             using var msg = CreateRequest(HttpMethod.Post, "tutor/evaluate-exercise", content);
-            var response = await _httpClient.SendAsync(msg, ct);
+            var response = await _httpClient.SendAsync(msg, cts.Token);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<ExerciseEvaluationResultDto>(_jsonOptions, ct);
+            var result = await response.Content.ReadFromJsonAsync<ExerciseEvaluationResultDto>(_jsonOptions, cts.Token);
             return result ?? new ExerciseEvaluationResultDto();
         }
         catch (Exception ex)
@@ -273,7 +293,7 @@ public sealed class StudyPilotKnowledgeAIClient : IStudyPilotKnowledgeAIClient
         finally
         {
             sw.Stop();
-            StudyPilotMetrics.AIRequestDurationMs.Record(sw.ElapsedMilliseconds);
+            StudyPilotMetrics.RecordAIDuration("tutor_evaluate", sw.ElapsedMilliseconds);
         }
     }
 }

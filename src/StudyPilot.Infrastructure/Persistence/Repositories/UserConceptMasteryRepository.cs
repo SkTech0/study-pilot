@@ -24,6 +24,12 @@ public sealed class UserConceptMasteryRepository : IUserConceptMasteryRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<UserConceptMastery>> GetByUserAndDocumentAsync(Guid userId, Guid documentId, CancellationToken cancellationToken = default) =>
+        await _db.UserConceptMasteries
+            .AsNoTracking()
+            .Where(m => m.UserId == userId && _db.Concepts.Any(c => c.Id == m.ConceptId && c.DocumentId == documentId))
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<UserConceptMastery>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default) =>
         await _db.UserConceptMasteries
             .Where(m => m.UserId == userId)

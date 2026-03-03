@@ -10,22 +10,27 @@ using StudyPilot.Domain.Entities;
 using StudyPilot.Domain.Enums;
 using StudyPilot.Infrastructure.AI;
 using StudyPilot.Infrastructure.Persistence.Repositories;
+using StudyPilot.Infrastructure.Services;
 
 namespace StudyPilot.Infrastructure.BackgroundJobs;
 
 public sealed class QuizQuestionGenerationJobWorker : BackgroundService
 {
+    private const int PendingCountPollThrottle = 6;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly DbBackedQuizQuestionGenerationJobQueue _queue;
     private readonly IOptions<QuizQuestionGenerationJobOptions> _options;
     private readonly ILogger<QuizQuestionGenerationJobWorker> _logger;
-    private const int LlmTimeoutSeconds = 30;
+    private int _pollCount;
 
     public QuizQuestionGenerationJobWorker(
         IServiceScopeFactory scopeFactory,
+        DbBackedQuizQuestionGenerationJobQueue queue,
         IOptions<QuizQuestionGenerationJobOptions> options,
         ILogger<QuizQuestionGenerationJobWorker> logger)
     {
         _scopeFactory = scopeFactory;
+        _queue = queue;
         _options = options;
         _logger = logger;
     }
@@ -55,6 +60,8 @@ public sealed class QuizQuestionGenerationJobWorker : BackgroundService
                 var job = await jobRepo.TryClaimNextAsync(workerId, processingTimeout, maxRetries, stoppingToken);
                 if (job is null)
                 {
+                    if (Interlocked.Increment(ref _pollCount) % PendingCountPollThrottle == 0)
+                        _queue.SetPendingCountFromDb(await jobRepo.GetPendingCountAsync(stoppingToken));
                     await Task.Delay(pollInterval, stoppingToken);
                     continue;
                 }
@@ -62,8 +69,9 @@ public sealed class QuizQuestionGenerationJobWorker : BackgroundService
                 _logger.LogInformation("StepComplete JobId={JobId} QuizId={QuizId} QuestionIndex={QuestionIndex} StepName=job_claimed CorrelationId={CorrelationId}",
                     job.Id, job.QuizId, job.QuestionIndex, job.CorrelationId);
 
+                var llmTimeoutSec = _options.Value.LlmTimeoutSeconds > 0 ? _options.Value.LlmTimeoutSeconds : 30;
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-                timeoutCts.CancelAfter(TimeSpan.FromSeconds(LlmTimeoutSeconds));
+                timeoutCts.CancelAfter(TimeSpan.FromSeconds(llmTimeoutSec));
 
                 var question = await quizRepo.GetQuestionByQuizAndIndexAsync(job.QuizId, job.QuestionIndex, timeoutCts.Token);
                 if (question is null || question.Status != QuestionGenerationStatus.Generating)
@@ -139,6 +147,8 @@ public sealed class QuizQuestionGenerationJobWorker : BackgroundService
                 var failureReason = providerException?.Message ?? "Generation returned no valid question (parse or content).";
                 var nextRetry = allowRetry ? DateTime.UtcNow.AddSeconds(Math.Pow(2, job.RetryCount) * 2) : (DateTime?)null;
                 await jobRepo.MarkFailedAsync(job.Id, failureReason, allowRetry, nextRetry, stoppingToken);
+                if (allowRetry)
+                    StudyPilotMetrics.JobRetriesTotal.Add(1, new KeyValuePair<string, object?>("queue", "quiz"));
 
                 if (!allowRetry)
                 {

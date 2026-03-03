@@ -11,6 +11,10 @@ namespace StudyPilot.Infrastructure.BackgroundJobs;
 public sealed class DbBackedKnowledgeEmbeddingJobQueue : IKnowledgeEmbeddingJobQueue
 {
     private readonly IServiceProvider _services;
+    private volatile int _pendingCountFromDb = -1;
+
+    public int CachedPendingCount => _pendingCountFromDb >= 0 ? _pendingCountFromDb : 0;
+    internal void SetPendingCountFromDb(int count) => _pendingCountFromDb = count;
 
     public DbBackedKnowledgeEmbeddingJobQueue(IServiceProvider services) => _services = services;
 

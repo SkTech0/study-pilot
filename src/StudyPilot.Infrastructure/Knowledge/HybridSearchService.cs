@@ -65,27 +65,24 @@ LIMIT @k";
         CancellationToken cancellationToken = default)
     {
         var swTotal = Stopwatch.StartNew();
-        var vectorSw = Stopwatch.StartNew();
-        var vectorResults = await _vectorSearch.SearchAsync(userId, queryEmbedding, documentId, VectorTopK, cancellationToken).ConfigureAwait(false);
-        vectorSw.Stop();
-        StudyPilotMetrics.VectorSearchMs.Record(vectorSw.ElapsedMilliseconds);
+        var vectorTask = _vectorSearch.SearchAsync(userId, queryEmbedding, documentId, VectorTopK, cancellationToken);
+        var keywordTask = !string.IsNullOrWhiteSpace(queryText) && queryText.Length <= 500
+            ? RunKeywordSearchAsync(userId, documentId, queryText.Trim(), cancellationToken)
+            : Task.FromResult<IReadOnlyList<RetrievedChunk>>(Array.Empty<RetrievedChunk>());
+
+        var vectorResults = await vectorTask.ConfigureAwait(false);
+        StudyPilotMetrics.VectorSearchMs.Record(swTotal.ElapsedMilliseconds);
 
         IReadOnlyList<RetrievedChunk> keywordResults = Array.Empty<RetrievedChunk>();
         var keywordOk = false;
-        if (!string.IsNullOrWhiteSpace(queryText) && queryText.Length <= 500)
+        try
         {
-            try
-            {
-                var kwSw = Stopwatch.StartNew();
-                keywordResults = await RunKeywordSearchAsync(userId, documentId, queryText.Trim(), cancellationToken).ConfigureAwait(false);
-                kwSw.Stop();
-                StudyPilotMetrics.HybridRerankMs.Record(kwSw.ElapsedMilliseconds);
-                keywordOk = true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Keyword search failed; using vector-only. Query length: {Length}", queryText.Length);
-            }
+            keywordResults = await keywordTask.ConfigureAwait(false);
+            keywordOk = !string.IsNullOrWhiteSpace(queryText) && queryText.Length <= 500;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Keyword search failed; using vector-only. Query length: {Length}", queryText?.Length ?? 0);
         }
 
         double masteryBoost = 0.5;

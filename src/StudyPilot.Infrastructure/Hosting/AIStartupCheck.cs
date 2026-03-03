@@ -23,14 +23,21 @@ public sealed class AIStartupCheck : IHostedService
         {
             try
             {
-                using var scope = _services.CreateScope();
-                var client = scope.ServiceProvider.GetRequiredService<IStudyPilotAIClient>();
-                var status = await client.CheckHealthAsync(cancellationToken);
-                if (status != AIHealthStatus.Unhealthy)
+                await using var scope = _services.CreateAsyncScope();
+                var aiClient = scope.ServiceProvider.GetRequiredService<IStudyPilotAIClient>();
+                var status = await aiClient.CheckHealthAsync(cancellationToken);
+                if (status == AIHealthStatus.Unhealthy) continue;
+                var knowledgeClient = scope.ServiceProvider.GetRequiredService<IStudyPilotKnowledgeAIClient>();
+                try
                 {
-                    _logger.LogInformation("AI startup check passed: {Status}", status);
-                    return;
+                    _ = await knowledgeClient.CreateEmbeddingsAsync(new[] { "ping" }, cancellationToken);
                 }
+                catch
+                {
+                    continue;
+                }
+                _logger.LogInformation("AI startup check passed: {Status}", status);
+                return;
             }
             catch (Exception ex)
             {

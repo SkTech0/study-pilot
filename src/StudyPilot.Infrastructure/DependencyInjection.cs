@@ -97,11 +97,11 @@ public static class DependencyInjection
         .AddHttpMessageHandler<AiConcurrencyHandler>()
         .AddStandardResilienceHandler(options =>
         {
-            // Quiz generation can take several minutes; use 5 min so AI has time to respond.
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(300);
             options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(300);
-            options.CircuitBreaker.ShouldHandle = _ => new ValueTask<bool>(false);
-            // Sampling duration must be at least 2× AttemptTimeout for validation (300s × 2 = 600s).
+            options.CircuitBreaker.ShouldHandle = args => new ValueTask<bool>(
+                args.Outcome.Exception is HttpRequestException or TaskCanceledException ||
+                (args.Outcome.Result?.StatusCode is System.Net.HttpStatusCode status && status >= System.Net.HttpStatusCode.InternalServerError));
             options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(600);
             options.CircuitBreaker.FailureRatio = 0.5;
             options.CircuitBreaker.MinimumThroughput = 3;
@@ -120,7 +120,9 @@ public static class DependencyInjection
         {
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(120);
             options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
-            options.CircuitBreaker.ShouldHandle = _ => new ValueTask<bool>(false);
+            options.CircuitBreaker.ShouldHandle = args => new ValueTask<bool>(
+                args.Outcome.Exception is HttpRequestException or TaskCanceledException ||
+                (args.Outcome.Result?.StatusCode is System.Net.HttpStatusCode status && status >= System.Net.HttpStatusCode.InternalServerError));
             options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(240);
             options.CircuitBreaker.FailureRatio = 0.5;
             options.CircuitBreaker.MinimumThroughput = 3;

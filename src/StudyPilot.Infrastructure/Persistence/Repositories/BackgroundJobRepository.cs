@@ -53,7 +53,7 @@ SELECT ""Id"" FROM ""BackgroundJobs""
 WHERE (""Status"" = 'Pending' OR (""Status"" = 'Processing' AND ""ClaimedAtUtc"" < {0}))
 AND (""NextRetryAtUtc"" IS NULL OR ""NextRetryAtUtc"" <= {1})
 AND ""RetryCount"" < {2}
-ORDER BY ""CreatedAtUtc"" DESC
+ORDER BY ""CreatedAtUtc"" ASC
 LIMIT 1
 FOR UPDATE SKIP LOCKED", cutoff, now, maxRetries)
                     .ToListAsync(cancellationToken);
@@ -61,10 +61,6 @@ FOR UPDATE SKIP LOCKED", cutoff, now, maxRetries)
                 if (ids.Count == 0)
                 {
                     await transaction.CommitAsync(cancellationToken);
-                    var pendingCount = await GetPendingCountAsync(cancellationToken);
-                    _logger.LogInformation(
-                        "TryClaimNextAsync: no eligible job found. PendingOrProcessingCount={PendingCount} WorkerId={WorkerId} MaxRetries={MaxRetries}",
-                        pendingCount, workerId, maxRetries);
                     return (BackgroundJob?)null;
                 }
 

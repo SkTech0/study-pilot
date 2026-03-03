@@ -30,7 +30,6 @@ public sealed class StreamChatMessageQueryHandler : IRequestHandler<StreamChatMe
     private readonly IHybridSearchService _hybridSearch;
     private readonly IChatService _chatService;
     private readonly IUserConceptMasteryRepository _masteryRepository;
-    private readonly IConceptRepository _conceptRepository;
     private readonly ICorrelationIdAccessor? _correlationIdAccessor;
 
     public StreamChatMessageQueryHandler(
@@ -43,7 +42,6 @@ public sealed class StreamChatMessageQueryHandler : IRequestHandler<StreamChatMe
         IHybridSearchService hybridSearch,
         IChatService chatService,
         IUserConceptMasteryRepository masteryRepository,
-        IConceptRepository conceptRepository,
         ICorrelationIdAccessor? correlationIdAccessor)
     {
         _chatSessionRepository = chatSessionRepository;
@@ -55,7 +53,6 @@ public sealed class StreamChatMessageQueryHandler : IRequestHandler<StreamChatMe
         _hybridSearch = hybridSearch;
         _chatService = chatService;
         _masteryRepository = masteryRepository;
-        _conceptRepository = conceptRepository;
         _correlationIdAccessor = correlationIdAccessor;
     }
 
@@ -163,10 +160,7 @@ public sealed class StreamChatMessageQueryHandler : IRequestHandler<StreamChatMe
     private async Task<ExplanationStyle?> ResolveExplanationStyleAsync(Guid userId, Guid? documentId, CancellationToken cancellationToken)
     {
         if (!documentId.HasValue) return null;
-        var concepts = await _conceptRepository.GetByDocumentIdAsync(documentId.Value, cancellationToken).ConfigureAwait(false);
-        if (concepts.Count == 0) return null;
-        var conceptIds = concepts.Select(c => c.Id).ToList();
-        var masteries = await _masteryRepository.GetByUserAndConceptsAsync(userId, conceptIds, cancellationToken).ConfigureAwait(false);
+        var masteries = await _masteryRepository.GetByUserAndDocumentAsync(userId, documentId.Value, cancellationToken).ConfigureAwait(false);
         if (masteries.Count == 0) return null;
         var avg = masteries.Average(m => m.MasteryScore);
         return ExplanationStyleResolver.FromAverageMastery(avg);

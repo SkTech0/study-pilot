@@ -9,12 +9,18 @@ public static class StudyPilotMetrics
     private static readonly Meter Meter = new(MeterName);
     public static readonly Counter<long> DocumentsProcessedTotal = Meter.CreateCounter<long>("documents_processed_total");
     public static readonly Histogram<double> AIRequestDurationMs = Meter.CreateHistogram<double>("ai_request_duration_ms");
+
+    public static void RecordAIDuration(string operation, double durationMs) =>
+        AIRequestDurationMs.Record(durationMs, new KeyValuePair<string, object?>("operation", operation));
     public static readonly ObservableGauge<int> BackgroundQueueLength = Meter.CreateObservableGauge("background_queue_length", () => GetQueueLength());
+    public static readonly ObservableGauge<int> QuizQueueLength = Meter.CreateObservableGauge("quiz_queue_length", () => GetQuizQueueLength());
+    public static readonly ObservableGauge<int> EmbeddingQueueLength = Meter.CreateObservableGauge("embedding_queue_length", () => GetEmbeddingQueueLength());
     public static readonly Histogram<double> QuizGenerationDurationMs = Meter.CreateHistogram<double>("quiz_generation_duration_ms");
     public static readonly Counter<long> HttpRequestsTotal = Meter.CreateCounter<long>("http_requests_total");
     public static readonly Histogram<double> HttpRequestDurationMs = Meter.CreateHistogram<double>("http_request_duration_ms");
     public static readonly Counter<long> BackgroundJobsTotal = Meter.CreateCounter<long>("background_jobs_total");
     public static readonly Counter<long> BackgroundJobFailuresTotal = Meter.CreateCounter<long>("background_job_failures_total");
+    public static readonly Counter<long> JobRetriesTotal = Meter.CreateCounter<long>("job_retries_total");
 
     // Retrieval observability (attach to correlationId in logging)
     public static readonly Histogram<double> EmbeddingDurationMs = Meter.CreateHistogram<double>("embedding_duration_ms");
@@ -39,8 +45,14 @@ public static class StudyPilotMetrics
     public static readonly Counter<long> GoalCompleted = Meter.CreateCounter<long>("goal_completed");
 
     private static Func<int>? _queueLengthProvider;
+    private static Func<int>? _quizQueueLengthProvider;
+    private static Func<int>? _embeddingQueueLengthProvider;
 
     public static void SetQueueLengthProvider(Func<int> provider) => _queueLengthProvider = provider;
+    public static void SetQuizQueueLengthProvider(Func<int> provider) => _quizQueueLengthProvider = provider;
+    public static void SetEmbeddingQueueLengthProvider(Func<int> provider) => _embeddingQueueLengthProvider = provider;
 
     private static int GetQueueLength() => _queueLengthProvider?.Invoke() ?? 0;
+    private static int GetQuizQueueLength() => _quizQueueLengthProvider?.Invoke() ?? 0;
+    private static int GetEmbeddingQueueLength() => _embeddingQueueLengthProvider?.Invoke() ?? 0;
 }

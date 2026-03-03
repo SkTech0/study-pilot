@@ -25,16 +25,19 @@ public sealed class LocalFileContentReader : IFileContentReader
 
         if (path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            using var document = PdfDocument.Open(path);
-            var sb = new StringBuilder(capacity: 16_384);
-            foreach (var page in document.GetPages())
+            return await Task.Run(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!string.IsNullOrWhiteSpace(page.Text))
-                    sb.AppendLine(page.Text);
-            }
-            return sb.ToString();
+                using var document = PdfDocument.Open(path);
+                var sb = new StringBuilder(capacity: 16_384);
+                foreach (var page in document.GetPages())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!string.IsNullOrWhiteSpace(page.Text))
+                        sb.AppendLine(page.Text);
+                }
+                return sb.ToString();
+            }, cancellationToken);
         }
 
         return await File.ReadAllTextAsync(path, cancellationToken);

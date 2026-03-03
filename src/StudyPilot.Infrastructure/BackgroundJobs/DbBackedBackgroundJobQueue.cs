@@ -12,6 +12,7 @@ public sealed class DbBackedBackgroundJobQueue : IBackgroundJobQueue, IBackgroun
     private readonly IServiceProvider _services;
     private readonly ILogger<DbBackedBackgroundJobQueue>? _logger;
     private int _pendingCountApprox;
+    private volatile int _pendingCountFromDb = -1;
     private long _processedCount;
 
     public DbBackedBackgroundJobQueue(IServiceProvider services, ILogger<DbBackedBackgroundJobQueue>? logger = null)
@@ -20,7 +21,9 @@ public sealed class DbBackedBackgroundJobQueue : IBackgroundJobQueue, IBackgroun
         _logger = logger;
     }
 
-    public int QueuedCount => Math.Max(0, _pendingCountApprox);
+    public int QueuedCount => _pendingCountFromDb >= 0 ? _pendingCountFromDb : Math.Max(0, _pendingCountApprox);
+
+    internal void SetPendingCountFromDb(int count) => _pendingCountFromDb = count;
     public long ProcessedCount => _processedCount;
 
     public void RecordProcessed() => Interlocked.Increment(ref _processedCount);

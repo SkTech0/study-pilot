@@ -62,7 +62,10 @@ public sealed class GetQuizQuestionQueryHandler : IRequestHandler<GetQuizQuestio
             return Result<GetQuizQuestionResult>.Success(new GetQuizQuestionResult(question.Id, null, null, QuestionGenerationStatus.Failed, question.ErrorMessage, null));
 
         if (request.QuestionIndex + 1 < quiz.TotalQuestionCount)
-            _ = _quizJobQueue.EnqueueAsync(request.QuizId, request.QuestionIndex + 1, _correlationIdAccessor?.Get(), CancellationToken.None);
+        {
+            _ = _quizJobQueue.EnqueueAsync(request.QuizId, request.QuestionIndex + 1, _correlationIdAccessor?.Get(), cancellationToken)
+                .ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnFaulted);
+        }
 
         return Result<GetQuizQuestionResult>.Success(new GetQuizQuestionResult(
             question.Id,

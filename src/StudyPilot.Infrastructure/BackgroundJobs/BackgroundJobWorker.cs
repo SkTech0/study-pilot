@@ -69,10 +69,14 @@ public sealed class BackgroundJobWorker : BackgroundService
                 var job = await jobRepository.TryClaimNextAsync(workerId, processingTimeout, maxRetries, stoppingToken);
                 if (job is null)
                 {
-                    var pendingCount = await jobRepository.GetPendingCountAsync(stoppingToken);
-                    _logger.LogDebug(
-                        "Background job poll: no job claimed this cycle. PendingOrProcessingCount={PendingCount} (retry in {PollIntervalSeconds}s)",
-                        pendingCount, _options.PollIntervalSeconds);
+                    if (_loopCount % 6 == 0)
+                    {
+                        var pendingCount = await jobRepository.GetPendingCountAsync(stoppingToken);
+                        _queue.SetPendingCountFromDb(pendingCount);
+                        _logger.LogDebug(
+                            "Background job poll: no job claimed. PendingOrProcessingCount={PendingCount} (retry in {PollIntervalSeconds}s)",
+                            pendingCount, _options.PollIntervalSeconds);
+                    }
                     await Task.Delay(pollInterval, stoppingToken);
                     continue;
                 }
@@ -96,7 +100,10 @@ public sealed class BackgroundJobWorker : BackgroundService
                     var nextRetry = allowRetry ? DateTime.UtcNow.AddSeconds(Math.Pow(2, job.RetryCount) * 5) : (DateTime?)null;
                     await jobRepository.MarkFailedAsync(job.Id, "Processing cancelled or timed out.", allowRetry, nextRetry, stoppingToken);
                     if (allowRetry)
+                    {
+                        StudyPilotMetrics.JobRetriesTotal.Add(1, new KeyValuePair<string, object?>("queue", "background"));
                         await documentRepository.ResetToPendingAsync(job.DocumentId, stoppingToken);
+                    }
                     StudyPilotMetrics.BackgroundJobFailuresTotal.Add(1);
                     _logger.LogWarning("StepComplete JobId={JobId} DocumentId={DocumentId} StepName=job_failed CorrelationId={CorrelationId} RetryCount={RetryCount} AllowRetry={AllowRetry}",
                         job.Id, job.DocumentId, job.CorrelationId, job.RetryCount, allowRetry);
@@ -109,7 +116,10 @@ public sealed class BackgroundJobWorker : BackgroundService
                     var failureReason = ex.Message?.Length > 1000 ? ex.Message[..1000] : (ex.Message ?? "Unknown error");
                     await jobRepository.MarkFailedAsync(job.Id, failureReason, allowRetry, nextRetry, stoppingToken);
                     if (allowRetry)
+                    {
+                        StudyPilotMetrics.JobRetriesTotal.Add(1, new KeyValuePair<string, object?>("queue", "background"));
                         await documentRepository.ResetToPendingAsync(job.DocumentId, stoppingToken);
+                    }
                     StudyPilotMetrics.BackgroundJobFailuresTotal.Add(1);
                     _logger.LogError(ex,
                         "StepComplete JobId={JobId} DocumentId={DocumentId} StepName=job_failed CorrelationId={CorrelationId} RetryCount={RetryCount} AllowRetry={AllowRetry}",

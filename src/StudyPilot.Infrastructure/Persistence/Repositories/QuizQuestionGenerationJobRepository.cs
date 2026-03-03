@@ -11,6 +11,7 @@ public interface IQuizQuestionGenerationJobRepository
     Task MarkCompletedAsync(Guid jobId, CancellationToken cancellationToken = default);
     Task MarkFailedAsync(Guid jobId, string? errorMessage, bool allowRetry, DateTime? nextRetryAtUtc, CancellationToken cancellationToken = default);
     Task ReleaseStuckJobsAsync(TimeSpan processingTimeout, CancellationToken cancellationToken = default);
+    Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class QuizQuestionGenerationJobRepository : IQuizQuestionGenerationJobRepository
@@ -118,4 +119,7 @@ FOR UPDATE SKIP LOCKED", cutoff, now, maxRetries)
                 .SetProperty(j => j.ClaimedAtUtc, (DateTime?)null)
                 .SetProperty(j => j.ClaimedBy, (string?)null), cancellationToken);
     }
+
+    public async Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default) =>
+        await _db.QuizQuestionGenerationJobs.CountAsync(j => j.Status == "Pending" || j.Status == "Processing", cancellationToken);
 }
