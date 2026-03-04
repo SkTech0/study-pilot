@@ -72,7 +72,22 @@ async def _embed_via_ollama(texts: list[str], settings: Settings) -> list[list[f
             # Ollama accepts "input" as string or array of strings
             payload = {"model": model, "input": texts if len(texts) > 1 else (texts[0] if texts else "")}
             r = await client.post(url, json=payload)
-            r.raise_for_status()
+            try:
+                r.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                # 404 is commonly returned when the embedding model has not been pulled locally.
+                # Surface a clear, user-facing error instead of a generic 500.
+                if e.response.status_code == 404:
+                    msg = (
+                        f"Ollama embedding model '{model}' not found. "
+                        f"Run: ollama pull {model}"
+                    )
+                    logger.warning("Ollama embeddings model missing: %s", msg)
+                    raise HTTPException(503, msg) from e
+                if e.response.status_code >= 500:
+                    logger.warning("Ollama embeddings 5xx: %s", e.response.status_code)
+                    raise HTTPException(503, "Embedding service temporarily unavailable. Please retry.") from e
+                raise
             data = r.json()
     except httpx.HTTPStatusError as e:
         if e.response.status_code >= 500:

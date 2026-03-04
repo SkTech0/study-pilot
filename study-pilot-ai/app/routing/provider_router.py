@@ -131,11 +131,9 @@ class ProviderRouter:
                 break
             if not self._metrics.is_healthy(name):
                 continue
+            # select_provider_ranked already returned the ranking order used above.
+            # Recomputing scores here is unnecessary for routing; we log a neutral score.
             score = 0.0
-            for n, s in select_provider_ranked(task_type, self._metrics, self._names, self._provider_costs):
-                if n == name:
-                    score = s
-                    break
             logger.info("ROUTER_SELECTED provider=%s score=%.4f", name, score)
             t0 = time.perf_counter()
             try:
@@ -213,11 +211,8 @@ class ProviderRouter:
         if name is None:
             yield SAFE_FALLBACK_ANSWER
             return
+        # Streaming path uses the same ranked list; avoid recomputing scores here.
         score = 0.0
-        for n, s in select_provider_ranked(task_type, self._metrics, self._names, self._provider_costs):
-            if n == name:
-                score = s
-                break
         logger.info("ROUTER_SELECTED provider=%s score=%.4f stream=true", name, score)
         provider = self._providers.get(name)
         if not provider:

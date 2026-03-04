@@ -18,9 +18,10 @@ class Settings(BaseSettings):
     ollama_stream: bool = True  # stream tokens so UI doesn't freeze; set False to get full response in one chunk
     ollama_request_timeout: float = 120.0  # seconds; local models can be slow, use ≥120 for concept extraction
     llm_provider: str = "gemini"  # legacy: "gemini" or "openai"
-    llm_fallback_chain: str = "ollama,gemini,deepseek,openrouter,openai"  # comma-separated; first is primary; ollama first for all AI tasks; 429/402/failure tries next
+    llm_fallback_chain: str = "ollama"  # comma-separated; first is primary; ollama first for all AI tasks; 429/402/failure tries next
     request_timeout: float = 60.0
     llm_timeout_seconds: float = 30.0
     llm_max_tokens: int = 1024
     embedding_model: str = "openai/text-embedding-3-small"  # for OpenRouter; use "text-embedding-3-small" for direct OpenAI
     ollama_embedding_model: str = "nomic-embed-text"  # used when embeddings via Ollama (no OpenRouter/OpenAI key)
+#gemini,deepseek,openrouter,openai
