@@ -1,4 +1,5 @@
 using StudyPilot.Application.Abstractions.Knowledge;
+using StudyPilot.Application.Chat;
 using StudyPilot.Application.Knowledge.Models;
 using StudyPilot.Infrastructure.AI;
 using StudyPilot.Infrastructure.Services;
@@ -11,14 +12,23 @@ public sealed class ChatService : IChatService
 
     public ChatService(IStudyPilotKnowledgeAIClient client) => _client = client;
 
+    private const string EmptyAnswerFallback = "I'm temporarily unable to get a response from the AI. Please try again shortly.";
+
     public async Task<ChatAnswer> GenerateAnswerAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         var dto = ToDto(request);
         if (request.ExplanationStyle.HasValue)
             StudyPilotMetrics.ExplanationStyleUsed.Add(1);
         var response = await _client.ChatAsync(dto, cancellationToken);
+        var answer = (response.Answer ?? "").Trim();
+        var fallbackUsed = false;
+        if (string.IsNullOrWhiteSpace(answer))
+        {
+            answer = EmptyAnswerFallback;
+            fallbackUsed = true;
+        }
         var cited = ParseCitedIds(response.CitedChunkIds);
-        return new ChatAnswer(response.Answer ?? "", cited, response.Model);
+        return new ChatAnswer(answer, cited, response.Model, fallbackUsed ? ChatStatus.Fallback : ChatStatus.Ok, fallbackUsed);
     }
 
     public async Task<StreamChatResult> StreamChatAsync(
@@ -31,7 +41,7 @@ public sealed class ChatService : IChatService
             StudyPilotMetrics.ExplanationStyleUsed.Add(1);
         var result = await _client.StreamChatAsync(dto, onToken, cancellationToken);
         var cited = ParseCitedIds(result.CitedChunkIds ?? new List<string>());
-        return new StreamChatResult(cited, result.Model);
+        return new StreamChatResult(cited, result.Model, result.FallbackUsed ? ChatStatus.Fallback : ChatStatus.Ok, result.FallbackUsed);
     }
 
     private static ChatRequestDto ToDto(ChatRequest request) => new()

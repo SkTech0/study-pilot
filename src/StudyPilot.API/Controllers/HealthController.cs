@@ -76,4 +76,32 @@ public sealed class HealthController : ControllerBase
         await _cache.SetAsync("health:ai", statusString, AIHealthCacheTtl, cancellationToken);
         return Ok(new { status = statusString });
     }
+
+    [HttpGet("detailed")]
+    public async Task<IActionResult> GetDetailed(CancellationToken cancellationToken)
+    {
+        var dbOk = false;
+        try
+        {
+            await _db.Database.CanConnectAsync(cancellationToken);
+            dbOk = true;
+        }
+        catch { /* ignore */ }
+
+        var aiStatus = AIHealthStatus.Unhealthy;
+        try
+        {
+            aiStatus = await _aiClient.CheckHealthAsync(cancellationToken);
+        }
+        catch { /* ignore */ }
+
+        return Ok(new
+        {
+            api = "ok",
+            embedding = aiStatus != AIHealthStatus.Unhealthy ? "ok" : "fail",
+            chat_provider = aiStatus switch { AIHealthStatus.Healthy => "ok", AIHealthStatus.Degraded => "degraded", _ => "fail" },
+            fallback_available = true,
+            db = dbOk ? "ok" : "fail"
+        });
+    }
 }

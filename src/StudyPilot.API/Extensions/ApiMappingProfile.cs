@@ -4,6 +4,7 @@ using StudyPilot.API.Contracts.Responses;
 using StudyPilot.Application.Auth;
 using StudyPilot.Application.Auth.Login;
 using StudyPilot.Application.Auth.Register;
+using StudyPilot.Application.Chat;
 using StudyPilot.Application.Chat.CreateChatSession;
 using StudyPilot.Application.Chat.GetChatHistory;
 using StudyPilot.Application.Chat.SendChatMessage;
@@ -49,7 +50,8 @@ public sealed class ApiMappingProfile : Profile
         CreateMap<RefreshTokenRequest, RefreshTokenCommand>();
         CreateMap<RefreshTokenRequest, LogoutCommand>();
         CreateMap<CreateChatSessionResult, CreateChatSessionResponse>();
-        CreateMap<SendChatMessageResult, SendChatMessageResponse>();
+        CreateMap<SendChatMessageResult, SendChatMessageResponse>()
+            .ForMember(d => d.Status, o => o.MapFrom(s => s.Status.ToApiString()));
         CreateMap<GetChatHistoryResult, GetChatHistoryResponse>();
         CreateMap<ChatMessageItem, ChatMessageItemResponse>()
             .ForMember(d => d.Role, o => o.MapFrom(s => s.Role.ToString()));

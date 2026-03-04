@@ -7,11 +7,16 @@ import httpx
 from tenacity import RetryError
 
 from app.providers.base import LLMProvider
+from app.providers.provider_health import is_available, mark_unavailable
 
 logger = logging.getLogger(__name__)
 
 # When a provider returns 429, wait before trying the next (avoids hammering next provider).
 FALLBACK_DELAY_AFTER_429_SEC = 2.0
+
+SAFE_FALLBACK_ANSWER = (
+    "I'm temporarily unable to reach the AI provider. Please try again shortly."
+)
 
 
 def _is_rate_limit(exc: Exception) -> bool:
@@ -22,6 +27,28 @@ def _is_rate_limit(exc: Exception) -> bool:
         if getattr(last, "failed", False):
             inner = last.exception()
             return inner is not None and _is_rate_limit(inner)
+    return False
+
+
+def _is_payment_required(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 402:
+        return True
+    if isinstance(exc, RetryError):
+        last = exc.last_attempt
+        if getattr(last, "failed", False):
+            inner = last.exception()
+            return inner is not None and _is_payment_required(inner)
+    return False
+
+
+def _is_server_error(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code >= 500:
+        return True
+    if isinstance(exc, RetryError):
+        last = exc.last_attempt
+        if getattr(last, "failed", False):
+            inner = last.exception()
+            return inner is not None and _is_server_error(inner)
     return False
 
 
@@ -53,12 +80,16 @@ class FallbackAdapter(LLMProvider):
         last_error: Exception | None = None
         for i, provider in enumerate(self._providers):
             name = self._names[i] if i < len(self._names) else f"provider_{i}"
+            if not is_available(name):
+                continue
             try:
                 result = await provider.extract_concepts(text)
                 logger.info("LLM extract_concepts succeeded with provider=%s", name)
                 return result
             except Exception as e:
                 last_error = _unwrap_error(e)
+                if _is_payment_required(e):
+                    mark_unavailable(name)
                 logger.warning(
                     "LLM extract_concepts failed with provider=%s: %s. Failing over to next provider.",
                     name,
@@ -75,12 +106,16 @@ class FallbackAdapter(LLMProvider):
         last_error: Exception | None = None
         for i, provider in enumerate(self._providers):
             name = self._names[i] if i < len(self._names) else f"provider_{i}"
+            if not is_available(name):
+                continue
             try:
                 result = await provider.generate_questions(concepts, count)
                 logger.info("LLM generate_questions succeeded with provider=%s", name)
                 return result
             except Exception as e:
                 last_error = _unwrap_error(e)
+                if _is_payment_required(e):
+                    mark_unavailable(name)
                 logger.warning(
                     "LLM generate_questions failed with provider=%s: %s. Failing over to next provider.",
                     name,
@@ -104,21 +139,24 @@ class FallbackAdapter(LLMProvider):
         last_error: Exception | None = None
         for i, provider in enumerate(self._providers):
             name = self._names[i] if i < len(self._names) else f"provider_{i}"
+            if not is_available(name):
+                continue
             try:
                 result = await provider.chat(
                     system, question, context, explanation_style, require_json=require_json
                 )
                 logger.info("LLM chat succeeded with provider=%s", name)
                 if isinstance(result, dict):
-                    # Ensure contract keys exist even if a provider implementation drifted.
                     answer = result.get("answer") or ""
                     cited = result.get("citedChunkIds") or []
                     if not isinstance(cited, list):
                         cited = []
-                    return {"answer": str(answer), "citedChunkIds": cited}
-                return {"answer": "", "citedChunkIds": []}
+                    return {"answer": str(answer), "citedChunkIds": cited, "model": result.get("model")}
+                return {"answer": "", "citedChunkIds": [], "model": None}
             except Exception as e:
                 last_error = _unwrap_error(e)
+                if _is_payment_required(e):
+                    mark_unavailable(name)
                 logger.warning(
                     "LLM chat failed with provider=%s: %s. Failing over to next provider.",
                     name,
@@ -127,9 +165,8 @@ class FallbackAdapter(LLMProvider):
                 )
                 if _is_rate_limit(e) and i + 1 < len(self._providers):
                     await asyncio.sleep(FALLBACK_DELAY_AFTER_429_SEC)
-        if last_error:
-            raise last_error
-        raise RuntimeError("No LLM providers available for chat")
+        logger.error("All LLM providers failed for chat; returning safe fallback. Last error: %s", last_error)
+        return {"answer": SAFE_FALLBACK_ANSWER, "citedChunkIds": [], "model": None}
 
     async def stream_chat(
         self,
@@ -141,6 +178,8 @@ class FallbackAdapter(LLMProvider):
         last_error: Exception | None = None
         for i, provider in enumerate(self._providers):
             name = self._names[i] if i < len(self._names) else f"provider_{i}"
+            if not is_available(name):
+                continue
             try:
                 async for token in provider.stream_chat(
                     system, question, context, explanation_style
@@ -150,6 +189,8 @@ class FallbackAdapter(LLMProvider):
                 return
             except Exception as e:
                 last_error = _unwrap_error(e)
+                if _is_payment_required(e):
+                    mark_unavailable(name)
                 logger.warning(
                     "LLM stream_chat failed with provider=%s: %s. Failing over to next provider.",
                     name,
@@ -158,6 +199,5 @@ class FallbackAdapter(LLMProvider):
                 )
                 if _is_rate_limit(e) and i + 1 < len(self._providers):
                     await asyncio.sleep(FALLBACK_DELAY_AFTER_429_SEC)
-        if last_error:
-            raise last_error
-        raise RuntimeError("No LLM providers available for stream_chat")
+        logger.error("All LLM providers failed for stream_chat; yielding safe fallback. Last error: %s", last_error)
+        yield SAFE_FALLBACK_ANSWER

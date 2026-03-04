@@ -37,6 +37,7 @@ public static class DocumentKnowledgePolicy
             (ProcessingStatus.Pending, ProcessingStatus.Processing) => true,
             (ProcessingStatus.Processing, ProcessingStatus.Completed) => true,
             (ProcessingStatus.Processing, ProcessingStatus.Failed) => true,
+            (ProcessingStatus.Processing, ProcessingStatus.Pending) => true, // Stuck recovery / retry: reset for re-claim
             (ProcessingStatus.Failed, ProcessingStatus.Pending) => true,
             _ => false
         };

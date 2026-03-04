@@ -160,6 +160,12 @@ public sealed class StudyPilotKnowledgeAIClient : IStudyPilotKnowledgeAIClient
                 }
                 catch (JsonException) { /* skip malformed line */ }
             }
+            if (tokenCount == 0)
+            {
+                const string fallbackToken = "I'm temporarily unable to get a response. Please try again shortly.";
+                await onToken(fallbackToken).ConfigureAwait(false);
+                result.FallbackUsed = true;
+            }
             if (tokenCount > 0)
                 StudyPilotMetrics.TokensGenerated.Add(tokenCount);
             return result;

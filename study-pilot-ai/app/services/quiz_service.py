@@ -1,5 +1,6 @@
+from typing import Any
+
 from app.models.schemas import ConceptIn, QuizQuestionOut
-from app.providers.base import LLMProvider
 
 
 def _normalize_correct_answer(correct: str, options: list[str]) -> str:
@@ -29,14 +30,14 @@ def _normalize_correct_answer(correct: str, options: list[str]) -> str:
 
 
 class QuizService:
-    def __init__(self, provider: LLMProvider):
-        self._provider = provider
+    def __init__(self, router: Any):
+        self._router = router
 
     async def generate_questions(
         self, concepts: list[ConceptIn], question_count: int
     ) -> list[QuizQuestionOut]:
         concept_dicts = [{"name": c.name} for c in concepts]
-        raw = await self._provider.generate_questions(concept_dicts, question_count)
+        raw = await self._router.execute("quiz", {"concepts": concept_dicts, "count": question_count})
         result: list[QuizQuestionOut] = []
         for item in raw if isinstance(raw, list) else []:
             if not isinstance(item, dict):

@@ -49,6 +49,16 @@ async def tutor_respond(
     if not isinstance(cited, list):
         cited = []
     cited = [str(x) for x in cited]
+
+    # Fallback: if model returned plain text in "answer" (e.g. wrong schema), show it so UI is not blank
+    if not message and raw.strip():
+        logger.warning(
+            "Tutor response had no parseable message/nextStep; using raw answer as message (len=%d). "
+            "Provider may have returned wrong JSON shape.",
+            len(raw),
+        )
+        message = raw.strip()
+
     return {
         "message": message,
         "nextStep": next_step,

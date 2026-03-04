@@ -71,6 +71,7 @@ class ChatResponse(BaseModel):
     answer: str
     cited_chunk_ids: list[str] = Field(default_factory=list, alias="citedChunkIds")
     model: str | None = None
+    status: str = "ok"  # ok | fallback | insufficient_context | error
 
 
 class TutorGoalIn(BaseModel):

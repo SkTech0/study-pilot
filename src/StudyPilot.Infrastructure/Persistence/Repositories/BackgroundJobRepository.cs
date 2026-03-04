@@ -11,6 +11,8 @@ public interface IBackgroundJobRepository
     Task MarkCompletedAsync(Guid jobId, CancellationToken cancellationToken = default);
     Task MarkFailedAsync(Guid jobId, string? errorMessage, bool allowRetry, DateTime? nextRetryAtUtc, CancellationToken cancellationToken = default);
     Task ReleaseStuckJobsAsync(TimeSpan processingTimeout, CancellationToken cancellationToken = default);
+    /// <summary>Release any Processing job whose DocumentId is in the list (set to Pending, clear claim) so stuck docs can be re-queued.</summary>
+    Task<int> ReleaseProcessingJobsForDocumentsAsync(IReadOnlyList<Guid> documentIds, CancellationToken cancellationToken = default);
     Task<bool> ExistsPendingOrProcessingForDocumentAsync(Guid documentId, CancellationToken cancellationToken = default);
     Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default);
     /// <summary>Reset all Failed jobs to Pending (RetryCount=0, clear claim/next retry) so the worker can process them. Returns count reset.</summary>
@@ -124,6 +126,17 @@ WHERE ""Id"" = {3}", status, err, nextRetryAtUtc ?? (object)DBNull.Value, jobId,
         var cutoff = DateTime.UtcNow.Add(-processingTimeout);
         await _db.BackgroundJobs
             .Where(j => j.Status == "Processing" && j.ClaimedAtUtc != null && j.ClaimedAtUtc < cutoff)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(j => j.Status, "Pending")
+                .SetProperty(j => j.ClaimedAtUtc, (DateTime?)null)
+                .SetProperty(j => j.ClaimedBy, (string?)null), cancellationToken);
+    }
+
+    public async Task<int> ReleaseProcessingJobsForDocumentsAsync(IReadOnlyList<Guid> documentIds, CancellationToken cancellationToken = default)
+    {
+        if (documentIds.Count == 0) return 0;
+        return await _db.BackgroundJobs
+            .Where(j => j.Status == "Processing" && documentIds.Contains(j.DocumentId))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(j => j.Status, "Pending")
                 .SetProperty(j => j.ClaimedAtUtc, (DateTime?)null)

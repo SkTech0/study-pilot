@@ -10,15 +10,19 @@ from fastapi import FastAPI
 from app.api.routes import router
 from app.core.config import Settings
 from app.core.exceptions import global_exception_handler
+from app.providers import get_provider, get_provider_chain, get_provider_chain_names
+from app.routing import ProviderRouter, ProviderMetrics
+from app.routing.config_loader import get_provider_costs
 from app.services import ConceptService, QuizService
-from app.providers import get_provider, get_provider_chain_names
+from app.services.embedding_service import create_embeddings_via_provider
+from app.services.tutor_service import tutor_respond, evaluate_exercise
 
 load_dotenv()
 
 
 def _configure_logging() -> logging.Logger:
     """
-    Configure application logging to also write to a rotating file.
+    Configure application logging to write to a rotating file (and capture uvicorn logs too).
     Uses AI_LOG_LEVEL env var (default INFO).
     """
     log_level_name = os.getenv("AI_LOG_LEVEL", "INFO").upper()
@@ -31,7 +35,7 @@ def _configure_logging() -> logging.Logger:
     base_dir = Path(__file__).resolve().parent.parent
     logs_dir = base_dir / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
-    log_path = logs_dir / "study-pilot-ai.log"
+    log_path = Path(os.getenv("AI_LOG_PATH", str(logs_dir / "study-pilot-ai.log")))
 
     file_handler = RotatingFileHandler(log_path, maxBytes=1_000_000, backupCount=5, encoding="utf-8")
     formatter = logging.Formatter(
@@ -43,14 +47,20 @@ def _configure_logging() -> logging.Logger:
     if not any(isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", "") == str(log_path) for h in root_logger.handlers):
         root_logger.addHandler(file_handler)
 
+    # Ensure uvicorn loggers also write to the same file.
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        l = logging.getLogger(name)
+        l.setLevel(level)
+        if not any(isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", "") == str(log_path) for h in l.handlers):
+            l.addHandler(file_handler)
+        l.propagate = False
+
     return logging.getLogger(__name__)
 
 
 logger = _configure_logging()
 
 _settings: Settings | None = None
-_concept_service: ConceptService | None = None
-_quiz_service: QuizService | None = None
 
 
 def get_settings() -> Settings:
@@ -64,29 +74,48 @@ def _get_provider():
     return get_provider(get_settings())
 
 
-def get_concept_service() -> ConceptService:
-    global _concept_service
-    if _concept_service is None:
-        _concept_service = ConceptService(_get_provider())
-    return _concept_service
+async def _embed_executor(name: str, texts: list[str]):
+    return await create_embeddings_via_provider(name, texts, get_settings())
 
 
-def get_quiz_service() -> QuizService:
-    global _quiz_service
-    if _quiz_service is None:
-        _quiz_service = QuizService(_get_provider())
-    return _quiz_service
+async def _tutor_runner(provider, payload: dict):
+    return await tutor_respond(
+        user_message=payload.get("user_message", ""),
+        current_step=payload.get("current_step", "Complete"),
+        goals=payload.get("goals", []),
+        mastery_levels=payload.get("mastery_levels", []),
+        recent_mistakes=payload.get("recent_mistakes") or [],
+        explanation_style=payload.get("explanation_style"),
+        tone=payload.get("tone"),
+        retrieved_chunks=payload.get("retrieved_chunks") or [],
+        provider=provider,
+    )
+
+
+async def _tutor_eval_runner(provider, payload: dict):
+    return await evaluate_exercise(
+        question=payload.get("question", ""),
+        expected_answer=payload.get("expected_answer", ""),
+        user_answer=payload.get("user_answer", ""),
+        provider=provider,
+    )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    chain = get_provider_chain_names(settings)
-    logger.info("LLM provider chain (adapter): %s", ", ".join(chain) if chain else "none")
-    provider = get_provider(settings)
-    app.state.concept_service = ConceptService(provider)
-    app.state.quiz_service = QuizService(provider)
-    app.state.llm_provider = provider
+    chain = get_provider_chain(settings)
+    names = [n for n, _ in chain]
+    logger.info("LLM provider chain (router): %s", ", ".join(names) if names else "none")
+    metrics = ProviderMetrics()
+    costs = get_provider_costs()
+    task_runners = {"tutor": _tutor_runner, "tutor_eval": _tutor_eval_runner}
+    router_instance = ProviderRouter(
+        chain, metrics, costs, embedding_executor=_embed_executor, task_runners=task_runners
+    )
+    app.state.router = router_instance
+    app.state.concept_service = ConceptService(router_instance)
+    app.state.quiz_service = QuizService(router_instance)
     yield
 
 
@@ -97,4 +126,16 @@ app.include_router(router, prefix="", tags=["ai"])
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    """Production health: api, embedding, chat_provider, fallback_available. No DB in Python service."""
+    settings = get_settings()
+    chain = get_provider_chain_names(settings)
+    provider = get_provider(settings)
+    chat_ok = provider is not None
+    fallback_available = len(chain) > 1
+    return {
+        "api": "ok",
+        "embedding": "ok",
+        "chat_provider": "ok" if chat_ok else "fail",
+        "fallback_available": fallback_available,
+        "db": "n/a",
+    }

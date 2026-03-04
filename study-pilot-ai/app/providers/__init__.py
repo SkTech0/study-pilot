@@ -37,7 +37,7 @@ def _has_openai_key(settings: Settings) -> bool:
 
 def _build_fallback_chain(settings: Settings) -> list[tuple[str, LLMProvider]]:
     """Build ordered list of (name, provider) from LLM_FALLBACK_CHAIN, only including providers with keys."""
-    chain_str = (settings.llm_fallback_chain or "").strip() or "gemini,deepseek,openrouter,openai"
+    chain_str = (settings.llm_fallback_chain or "").strip() or "ollama,gemini,deepseek,openrouter,openai"
     names = [n.strip().lower() for n in chain_str.split(",") if n.strip()]
     out: list[tuple[str, LLMProvider]] = []
     for name in names:
@@ -53,6 +53,22 @@ def _build_fallback_chain(settings: Settings) -> list[tuple[str, LLMProvider]]:
         elif name == "openai" and _has_openai_key(settings):
             out.append(("openai", OpenAIProvider(settings)))
     return out
+
+
+def get_provider_chain(settings: Settings) -> list[tuple[str, LLMProvider]]:
+    if (settings.ai_mode or "real").strip().lower() == "mock":
+        return [("mock", MockProvider())]
+    chain = _build_fallback_chain(settings)
+    if chain:
+        return chain
+    use_gemini = (settings.llm_provider or "").strip().lower() == "gemini"
+    if use_gemini and _has_gemini_key(settings):
+        return [("gemini", GeminiProvider(settings))]
+    if _has_openai_key(settings):
+        return [("openai", OpenAIProvider(settings))]
+    if _has_gemini_key(settings):
+        return [("gemini", GeminiProvider(settings))]
+    return [("openai", OpenAIProvider(settings))]
 
 
 def get_provider_chain_names(settings: Settings) -> list[str]:
@@ -112,5 +128,6 @@ __all__ = [
     "OpenRouterProvider",
     "FallbackAdapter",
     "get_provider",
+    "get_provider_chain",
     "get_provider_chain_names",
 ]

@@ -1,10 +1,12 @@
 using System.Text;
+using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using StudyPilot.API.Extensions;
 using StudyPilot.Application.Abstractions.Observability;
+using StudyPilot.Application.Chat;
 using StudyPilot.Application.Chat.StreamChatMessage;
 
 namespace StudyPilot.API.Controllers;
@@ -56,15 +58,19 @@ public sealed class ChatStreamController : ControllerBase
 
         try
         {
+            await Response.WriteAsync("event: start\ndata: {}\n\n", Encoding.UTF8, cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
             await foreach (var token in streamResult.Tokens.WithCancellation(cancellationToken))
             {
                 var payload = EscapeSseData(token);
                 await Response.WriteAsync($"event: token\ndata: {payload}\n\n", Encoding.UTF8, cancellationToken);
                 await Response.Body.FlushAsync(cancellationToken);
             }
-            await Response.WriteAsync("event: done\ndata: {}\n\n", Encoding.UTF8, cancellationToken);
-            await Response.Body.FlushAsync(cancellationToken);
             await streamResult.WhenComplete.WaitAsync(cancellationToken);
+            var status = await streamResult.StatusTask.WaitAsync(cancellationToken);
+            var doneData = JsonSerializer.Serialize(new { status = status.ToApiString() });
+            await Response.WriteAsync($"event: done\ndata: {doneData}\n\n", Encoding.UTF8, cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {

@@ -1,6 +1,9 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using StudyPilot.Application.Abstractions.Knowledge;
+using StudyPilot.Application.Abstractions.Observability;
 using StudyPilot.Application.Abstractions.Persistence;
+using StudyPilot.Application.Chat;
 using StudyPilot.Application.Chat.Constants;
 using StudyPilot.Application.Common.Errors;
 using StudyPilot.Application.Common.Models;
@@ -28,6 +31,8 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
     private readonly IHybridSearchService _hybridSearch;
     private readonly IChatService _chatService;
     private readonly IUserConceptMasteryRepository _masteryRepository;
+    private readonly ICorrelationIdAccessor? _correlationIdAccessor;
+    private readonly ILogger<SendChatMessageCommandHandler>? _logger;
 
     public SendChatMessageCommandHandler(
         IChatSessionRepository chatSessionRepository,
@@ -38,7 +43,9 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
         IQueryEmbeddingCache embeddingCache,
         IHybridSearchService hybridSearch,
         IChatService chatService,
-        IUserConceptMasteryRepository masteryRepository)
+        IUserConceptMasteryRepository masteryRepository,
+        ICorrelationIdAccessor? correlationIdAccessor = null,
+        ILogger<SendChatMessageCommandHandler>? logger = null)
     {
         _chatSessionRepository = chatSessionRepository;
         _chatMessageRepository = chatMessageRepository;
@@ -49,6 +56,8 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
         _hybridSearch = hybridSearch;
         _chatService = chatService;
         _masteryRepository = masteryRepository;
+        _correlationIdAccessor = correlationIdAccessor;
+        _logger = logger;
     }
 
     public async Task<Result<SendChatMessageResult>> Handle(SendChatMessageCommand request, CancellationToken cancellationToken)
@@ -67,28 +76,48 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
         await _chatMessageRepository.AddAsync(userMessage, cancellationToken);
 
         var queryText = content;
+        var masteryTask = ResolveExplanationStyleAsync(request.UserId, session.DocumentId, cancellationToken);
         var queryEmbedding = await _embeddingCache.GetAsync(queryText, cancellationToken);
         if (queryEmbedding is null)
         {
             queryEmbedding = await _embeddingService.EmbedAsync(queryText, cancellationToken);
             await _embeddingCache.SetAsync(queryText, queryEmbedding, cancellationToken);
         }
+        var explanationStyle = await masteryTask;
 
         var retrieved = await _hybridSearch.SearchAsync(request.UserId, queryEmbedding, session.DocumentId, queryText, TopK, cancellationToken);
 
+        var chunkCount = retrieved.Count;
+        var bestDistance = retrieved.Count > 0 ? retrieved.Min(c => c.Score) : 1.0;
+        var bestSimilarity = 1.0 - bestDistance;
+        var documentIds = retrieved.Select(c => c.DocumentId).Distinct().ToList();
+        _logger?.LogInformation(
+            "Retrieval decision request_id={RequestId} session_id={SessionId} chunk_count={ChunkCount} best_similarity={BestSimilarity} document_ids={DocumentIds} sufficient={Sufficient}",
+            _correlationIdAccessor?.Get(),
+            request.SessionId,
+            chunkCount,
+            bestSimilarity,
+            string.Join(",", documentIds.Select(id => id.ToString())),
+            HasSufficientContext(retrieved));
+
         string answerText;
         IReadOnlyList<Guid> cited;
+        var status = ChatStatus.Ok;
+        string? reason = null;
 
         if (!HasSufficientContext(retrieved))
         {
+            reason = chunkCount < RetrievalConstants.MinimumChunksForAnswer
+                ? $"chunk_count {chunkCount} < minimum {RetrievalConstants.MinimumChunksForAnswer}"
+                : $"best_similarity {bestSimilarity:F4} < threshold {RetrievalConstants.MinimumSimilarityThreshold}";
             answerText = retrieved.Count == 0
                 ? RetrievalConstants.InsufficientContextMessage + RetrievalConstants.EmbeddingsDelayedRetryHint
                 : RetrievalConstants.InsufficientContextMessage;
             cited = Array.Empty<Guid>();
+            status = ChatStatus.InsufficientContext;
         }
         else
         {
-            var explanationStyle = await ResolveExplanationStyleAsync(request.UserId, session.DocumentId, cancellationToken);
             var chatRequest = new ChatRequest(
                 request.UserId,
                 session.Id,
@@ -97,11 +126,33 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
                 retrieved,
                 GroundingSystemInstruction,
                 explanationStyle);
-            var answer = await _chatService.GenerateAnswerAsync(chatRequest, cancellationToken);
-            answerText = answer.Answer;
-            var allowedChunkIds = new HashSet<Guid>(retrieved.Select(c => c.ChunkId));
-            cited = (answer.CitedChunkIds ?? Array.Empty<Guid>()).Where(allowedChunkIds.Contains).Distinct().ToList();
+            try
+            {
+                var answer = await _chatService.GenerateAnswerAsync(chatRequest, cancellationToken);
+                answerText = (answer.Answer ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(answerText))
+                {
+                    answerText = "I'm temporarily unable to get a response from the AI. Please try again shortly.";
+                    status = ChatStatus.Fallback;
+                }
+                else if (answer.FallbackUsed)
+                {
+                    status = ChatStatus.Fallback;
+                }
+                var allowedChunkIds = new HashSet<Guid>(retrieved.Select(c => c.ChunkId));
+                cited = (answer.CitedChunkIds ?? Array.Empty<Guid>()).Where(allowedChunkIds.Contains).Distinct().ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Chat provider failed request_id={RequestId} session_id={SessionId}", _correlationIdAccessor?.Get(), request.SessionId);
+                answerText = "I'm temporarily unable to reach the AI provider. Please try again shortly.";
+                cited = Array.Empty<Guid>();
+                status = ChatStatus.Error;
+            }
         }
+
+        if (string.IsNullOrWhiteSpace(answerText))
+            answerText = "I'm temporarily unable to reach the AI provider. Please try again shortly.";
 
         var assistantMessage = new ChatMessage(session.Id, ChatRole.Assistant, answerText);
         await _chatMessageRepository.AddAsync(assistantMessage, cancellationToken);
@@ -109,7 +160,22 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
             await _citationRepository.AddRangeAsync(assistantMessage.Id, cited, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<SendChatMessageResult>.Success(new SendChatMessageResult(assistantMessage.Id, answerText, cited.ToList()));
+        _logger?.LogInformation(
+            "Chat request completed request_id={RequestId} session_id={SessionId} chunk_count={ChunkCount} retrieval_score={RetrievalScore} status={Status}",
+            _correlationIdAccessor?.Get(),
+            request.SessionId,
+            chunkCount,
+            bestSimilarity,
+            status.ToApiString());
+
+        return Result<SendChatMessageResult>.Success(new SendChatMessageResult(
+            assistantMessage.Id,
+            answerText,
+            cited.ToList(),
+            status,
+            chunkCount,
+            bestSimilarity,
+            reason));
     }
 
     private async Task<ExplanationStyle?> ResolveExplanationStyleAsync(Guid userId, Guid? documentId, CancellationToken cancellationToken)

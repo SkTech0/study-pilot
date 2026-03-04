@@ -238,6 +238,15 @@ The .NET API calls the **Python AI service** at `AIService:BaseUrl`. If that req
 2. **Use the correct BaseUrl:** For local run, the API uses `appsettings.Development.json`, which sets `AIService:BaseUrl` to `http://localhost:8000`. If you run the API without the Development environment, set `AIService__BaseUrl=http://localhost:8000` or add it to your appsettings.
 3. **API keys:** For real (non-mock) AI, set at least one key in `study-pilot-ai/.env` (e.g. `GEMINI_API_KEY`). See `config/ai.env.example` for the full list.
 
+### Tutor takes 1–2 minutes or returns 499 / "Something went wrong"
+
+With **Ollama** (or other local LLMs), tutor/respond can take **70–90+ seconds** per message. If the client or server times out before the AI responds, you may see **499** (client closed) or a generic error in the UI.
+
+**Fix:**
+
+- **Backend:** In Development, `AIService:LlmTimeoutSeconds` is set to **180** in `appsettings.Development.json` so the .NET API waits long enough for Ollama. Default elsewhere is 120s.
+- **UX:** Keep the "Tutor is thinking…" state visible; avoid closing the tab or navigating away until the reply appears. If you need faster replies, use a cloud provider (e.g. Gemini) in `study-pilot-ai/.env` or a smaller/faster Ollama model.
+
 ### `ECONNREFUSED` on `/documents`, `/health/ai`, `/progress/weak-topics`
 
 The frontend proxies `/api` to **http://localhost:5024**. If the .NET API is not running, you get connection refused.

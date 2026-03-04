@@ -26,10 +26,10 @@ class OllamaProvider(LLMProvider):
         base = (settings.ollama_base_url or "").strip() or "http://localhost:11434"
         self._base_url = base.rstrip("/")
         self._model = settings.ollama_model or "llama3.2"
-        # Use Ollama-specific timeout if set (local models often need >60s for long prompts)
-        timeout = getattr(settings, "llm_timeout_seconds", None) or getattr(settings, "ollama_request_timeout", None)
+        # Prefer Ollama-specific timeout (local models need ≥120s for tutor/respond and concept extraction)
+        timeout = getattr(settings, "ollama_request_timeout", None) or getattr(settings, "llm_timeout_seconds", None)
         self._timeout = (
-            float(timeout) if timeout is not None and float(timeout) > 0 else getattr(settings, "request_timeout", 30.0)
+            float(timeout) if timeout is not None and float(timeout) > 0 else 120.0
         )
         self._stream = getattr(settings, "ollama_stream", True)
         self._max_tokens = getattr(settings, "llm_max_tokens", 1024)
@@ -80,18 +80,29 @@ class OllamaProvider(LLMProvider):
         explanation_style: str | None = None,
         require_json: bool = True,
     ) -> dict:
-        prompt = get_chat_prompt(system, question, context, explanation_style)
-
-        json_system_message = (
-            "You MUST respond ONLY with valid JSON.\n"
-            "Do not include explanations.\n"
-            "Do not include markdown.\n"
-            "Output strictly:\n"
-            "{\n"
-            '  \"answer\": \"string\",\n'
-            '  \"citedChunkIds\": [\"string\"]\n'
-            "}\n"
-        )
+        # Tutor flow expects message, nextStep, optionalExercise, citedChunkIds. Do NOT use
+        # get_chat_prompt for tutor — it appends "Return answer, citedChunkIds" and the model
+        # follows that, so tutor_respond gets empty message.
+        is_tutor_shape = "nextStep" in (system or "") and "message" in (system or "")
+        if is_tutor_shape:
+            json_system_message = (
+                "You MUST respond ONLY with valid JSON.\n"
+                "Do not include markdown or explanations outside the JSON.\n"
+            )
+            # Use tutor prompt + question only; no chat template that forces answer/citedChunkIds.
+            prompt = f"{system}\n\nUSER MESSAGE:\n{question}"
+        else:
+            json_system_message = (
+                "You MUST respond ONLY with valid JSON.\n"
+                "Do not include explanations.\n"
+                "Do not include markdown.\n"
+                "Output strictly:\n"
+                "{\n"
+                '  \"answer\": \"string\",\n'
+                '  \"citedChunkIds\": [\"string\"]\n'
+                "}\n"
+            )
+            prompt = get_chat_prompt(system, question, context, explanation_style)
 
         messages: list[dict] = []
         if require_json:

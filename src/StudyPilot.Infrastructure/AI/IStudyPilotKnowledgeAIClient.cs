@@ -95,6 +95,7 @@ public sealed class StreamChatResultDto
 {
     public List<string> CitedChunkIds { get; set; } = [];
     public string? Model { get; set; }
+    public bool FallbackUsed { get; set; }
 }
 
 public sealed class EmbeddingsResultDto

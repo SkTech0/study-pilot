@@ -186,10 +186,19 @@ if [[ -n "$TUTOR_SID" ]]; then
     -H "Content-Type: application/json" \
     -d "{\"sessionId\":\"$TUTOR_SID\",\"message\":\"I want to learn the main concepts.\"}") || TUTOR_RESP=$'\n000'
   TUTOR_HTTP=$(echo "$TUTOR_RESP" | tail -1)
+  TUTOR_BODY=$(echo "$TUTOR_RESP" | sed '$d')
   if [[ "$TUTOR_HTTP" == "200" ]]; then
-    echo "  Tutor respond OK (200)"
+    MSG_LEN=0
+    if command -v jq &>/dev/null; then
+      MSG_LEN=$(echo "$TUTOR_BODY" | jq -r '.data.assistantMessage // .assistantMessage // ""' | wc -c | tr -d ' ')
+      MSG_PREVIEW=$(echo "$TUTOR_BODY" | jq -r '.data.assistantMessage // .assistantMessage // ""' | head -c 120)
+    fi
+    echo "  Tutor respond OK (200) assistantMessage length=${MSG_LEN} preview=${MSG_PREVIEW:-$TUTOR_BODY}"
+    if [[ "${MSG_LEN:-0}" -eq 0 ]]; then
+      echo "  WARNING: assistantMessage is empty — Ollama may be returning wrong JSON shape; check Python AI logs."
+    fi
   else
-    echo "  Tutor respond HTTP $TUTOR_HTTP (body: $(echo "$TUTOR_RESP" | head -1 | cut -c1-80))"
+    echo "  Tutor respond HTTP $TUTOR_HTTP (body: $(echo "$TUTOR_BODY" | cut -c1-80))"
   fi
 else
   echo "  Tutor start failed or no sessionId; response: ${TUTOR_START:0:120}"

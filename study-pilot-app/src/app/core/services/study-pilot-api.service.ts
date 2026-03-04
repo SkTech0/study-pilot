@@ -247,6 +247,11 @@ export interface SendChatMessageResult {
   assistantMessageId: string;
   answer: string;
   citedChunkIds: string[];
+  /** ok | fallback | insufficient_context | error */
+  status: string;
+  chunkCount?: number;
+  bestScore?: number;
+  reason?: string;
 }
 
 export interface ChatMessageItem {

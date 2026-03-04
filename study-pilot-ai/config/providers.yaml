@@ -1,0 +1,16 @@
+providers:
+  ollama:
+    cost: 0
+    timeout_ms: 45000
+  gemini:
+    cost: 0.2
+    timeout_ms: 30000
+  deepseek:
+    cost: 0.14
+    timeout_ms: 30000
+  openrouter:
+    cost: 0.5
+    timeout_ms: 25000
+  openai:
+    cost: 1.0
+    timeout_ms: 25000

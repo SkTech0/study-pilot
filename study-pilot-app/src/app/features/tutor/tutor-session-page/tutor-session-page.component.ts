@@ -1,5 +1,6 @@
-import { Component, inject, signal, computed, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { StudyPilotApiService, StartTutorResponse, TutorRespondResponse, EvaluateExerciseResponse } from '@core/services/study-pilot-api.service';
 import { GoalProgressSidebarComponent, TutorGoalItem } from '../goal-progress-sidebar/goal-progress-sidebar.component';
 import { TutorMessageStreamComponent, TutorMessageItem } from '../tutor-message-stream/tutor-message-stream.component';
@@ -9,7 +10,7 @@ import { ExercisePanelComponent, TutorExerciseItem } from '../exercise-panel/exe
   selector: 'app-tutor-session-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, GoalProgressSidebarComponent, TutorMessageStreamComponent, ExercisePanelComponent],
+  imports: [RouterLink, FormsModule, GoalProgressSidebarComponent, TutorMessageStreamComponent, ExercisePanelComponent],
   template: `
     <div class="p-4 sm:p-6 max-w-5xl mx-auto">
       <div class="mb-6 flex items-center justify-between">
@@ -41,20 +42,20 @@ import { ExercisePanelComponent, TutorExerciseItem } from '../exercise-panel/exe
               (submit)="onExerciseSubmit($event)"
             />
             @if (sessionId()) {
-              <div class="flex gap-2">
+              <form class="flex gap-2" (ngSubmit)="sendMessage()">
                 <input
                   type="text"
+                  name="message"
                   class="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Type your message…"
-                  [value]="inputMessage()"
-                  (input)="inputMessage.set($any($event.target).value)"
-                  (keydown.enter)="sendMessage()"
+                  placeholder="Type your message and press Enter or click Send…"
+                  [(ngModel)]="inputMessageValue"
                   [disabled]="responding()"
+                  aria-label="Your message to the tutor"
                 />
-                <button type="button" class="btn-primary" [disabled]="!inputMessage().trim() || responding()" (click)="sendMessage()">
+                <button type="submit" class="btn-primary" [disabled]="!inputMessageValue.trim() || responding()">
                   Send
                 </button>
-              </div>
+              </form>
             }
           </div>
           <div>
@@ -81,7 +82,8 @@ export class TutorSessionPageComponent {
   startError = signal<string | null>(null);
   responding = signal(false);
   evaluating = signal(false);
-  inputMessage = signal('');
+  /** Bound to the message input via ngModel so user can type and send reliably. */
+  inputMessageValue = '';
 
   startSession(): void {
     this.starting.set(true);
@@ -102,11 +104,11 @@ export class TutorSessionPageComponent {
 
   sendMessage(): void {
     const sid = this.sessionId();
-    const msg = this.inputMessage().trim();
+    const msg = this.inputMessageValue.trim();
     if (!sid || !msg) return;
     this.responding.set(true);
     this.messages.update((list) => [...list, { role: 'user', content: msg }]);
-    this.inputMessage.set('');
+    this.inputMessageValue = '';
     this.api.tutorRespond(sid, msg).subscribe({
       next: (res: TutorRespondResponse) => {
         this.messages.update((list) => [...list, { role: 'assistant', content: res.assistantMessage }]);

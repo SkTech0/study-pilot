@@ -13,25 +13,38 @@ OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings"
 EMBEDDING_DIMENSIONS = 1536
 
 
-async def create_embeddings(texts: list[str], settings: Settings) -> list[list[float]]:
-    """
-    Embeddings: OpenRouter or OpenAI when keys set; otherwise Ollama (local) for Ollama-only setups.
-    Returns list of 1536-dim vectors (padded/truncated when using Ollama's nomic-embed-text).
-    """
+async def create_embeddings_via_provider(provider_name: str, texts: list[str], settings: Settings) -> list[list[float]]:
     if not texts:
         return []
-
     if (settings.ai_mode or "real").strip().lower() == "mock":
         return [_mock_embedding() for _ in texts]
+    name = (provider_name or "").strip().lower()
+    if name == "ollama":
+        return await _embed_via_ollama(texts, settings)
+    if name == "openrouter":
+        key = (settings.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")).strip()
+        if key:
+            return await _embed_via_openrouter(texts, key, settings)
+        raise RuntimeError("OpenRouter API key not set")
+    if name == "openai":
+        key = (settings.openai_api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
+        if key:
+            return await _embed_via_openai(texts, key, settings)
+        raise RuntimeError("OpenAI API key not set")
+    return await _embed_via_ollama(texts, settings)
 
+
+async def create_embeddings(texts: list[str], settings: Settings) -> list[list[float]]:
+    if not texts:
+        return []
+    if (settings.ai_mode or "real").strip().lower() == "mock":
+        return [_mock_embedding() for _ in texts]
     openrouter_key = (settings.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")).strip()
     openai_key = (settings.openai_api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
-
     if openrouter_key:
         return await _embed_via_openrouter(texts, openrouter_key, settings)
     if openai_key:
         return await _embed_via_openai(texts, openai_key, settings)
-
     return await _embed_via_ollama(texts, settings)
 
 
