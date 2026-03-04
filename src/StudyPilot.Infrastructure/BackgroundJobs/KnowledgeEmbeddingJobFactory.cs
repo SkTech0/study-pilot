@@ -39,8 +39,8 @@ public sealed class KnowledgeEmbeddingJobFactory : IKnowledgeEmbeddingJobFactory
             var correlationAccessor = scope.ServiceProvider.GetService<ICorrelationIdAccessor>();
             var aiOptions = scope.ServiceProvider.GetRequiredService<IOptions<AIServiceOptions>>().Value;
             var optimizationConfig = scope.ServiceProvider.GetRequiredService<IOptimizationConfigProvider>();
-            var chunkSizeTokens = Math.Clamp(optimizationConfig.GetChunkSizeTokens(), 200, 2000);
-            var batchSize = Math.Clamp(optimizationConfig.GetEmbeddingBatchSize(), 4, 128);
+            var chunkSizeTokens = Math.Clamp(await optimizationConfig.GetChunkSizeTokensAsync(ct).ConfigureAwait(false), 200, 2000);
+            var batchSize = Math.Clamp(await optimizationConfig.GetEmbeddingBatchSizeAsync(ct).ConfigureAwait(false), 4, 128);
 
             if (!string.IsNullOrEmpty(correlationId))
                 correlationAccessor?.Set(correlationId);

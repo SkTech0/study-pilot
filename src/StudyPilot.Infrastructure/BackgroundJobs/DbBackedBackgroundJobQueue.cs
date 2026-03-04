@@ -2,6 +2,7 @@ using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StudyPilot.Application.Abstractions.BackgroundJobs;
+using StudyPilot.Application.Abstractions.Persistence;
 using StudyPilot.Infrastructure.Persistence;
 using StudyPilot.Infrastructure.Persistence.Repositories;
 
@@ -32,6 +33,7 @@ public sealed class DbBackedBackgroundJobQueue : IBackgroundJobQueue, IBackgroun
     {
         await using var scope = _services.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<IBackgroundJobRepository>();
+        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
         var options = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<BackgroundJobOptions>>().Value;
         var job = new BackgroundJob
         {
@@ -44,6 +46,7 @@ public sealed class DbBackedBackgroundJobQueue : IBackgroundJobQueue, IBackgroun
             CreatedAtUtc = DateTime.UtcNow
         };
         await repo.AddAsync(job, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         Interlocked.Increment(ref _pendingCountApprox);
         _logger?.LogInformation("DocumentProcessingJobEnqueued JobId={JobId} DocumentId={DocumentId} CorrelationId={CorrelationId}",
             job.Id, documentId, correlationId);

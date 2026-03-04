@@ -74,7 +74,7 @@ LIMIT @k";
         int topK,
         CancellationToken cancellationToken = default)
     {
-        var vectorTopK = Math.Clamp(_configProvider.GetVectorTopK(), 6, 50);
+        var vectorTopK = Math.Clamp(await _configProvider.GetVectorTopKAsync(cancellationToken).ConfigureAwait(false), 6, 50);
         var swTotal = Stopwatch.StartNew();
         var vectorTask = _vectorSearch.SearchAsync(userId, queryEmbedding, documentId, vectorTopK, cancellationToken);
         var keywordTask = !string.IsNullOrWhiteSpace(queryText) && queryText.Length <= 500

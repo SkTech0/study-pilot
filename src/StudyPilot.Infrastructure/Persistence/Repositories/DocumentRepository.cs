@@ -76,7 +76,6 @@ public sealed class DocumentRepository : IDocumentRepository
         if (doc is null) return;
         _stateMachine.TransitionToPending(doc);
         _db.Documents.Update(doc);
-        await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<Guid>> GetStuckProcessingDocumentIdsAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default) =>
@@ -110,8 +109,6 @@ public sealed class DocumentRepository : IDocumentRepository
                 // Invalid transition for this document; skip
             }
         }
-        if (ids.Count > 0)
-            await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return ids.Count;
     }
 }

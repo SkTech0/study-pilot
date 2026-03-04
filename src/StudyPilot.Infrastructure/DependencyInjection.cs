@@ -34,6 +34,8 @@ using StudyPilot.Infrastructure.Knowledge;
 using StudyPilot.Application.Abstractions.Optimization;
 using StudyPilot.Infrastructure.Optimization;
 using StudyPilot.Infrastructure.Resilience;
+using StudyPilot.Application.Abstractions.Chat;
+using StudyPilot.Infrastructure.Chat;
 
 namespace StudyPilot.Infrastructure;
 
@@ -135,6 +137,9 @@ public static class DependencyInjection
         services.AddScoped<IHybridSearchService, HybridSearchService>();
         services.AddScoped<IQueryEmbeddingCache, QueryEmbeddingCache>();
         services.AddScoped<IChatService, ChatService>();
+        services.AddSingleton<StreamCompletionQueue>();
+        services.AddSingleton<IStreamCompletionQueue>(sp => sp.GetRequiredService<StreamCompletionQueue>());
+        services.AddHostedService<StreamCompletionWorker>();
         services.AddScoped<ITutorService, TutorService>();
 
         services.AddSingleton<ICorrelationIdAccessor, CorrelationIdAccessor>();

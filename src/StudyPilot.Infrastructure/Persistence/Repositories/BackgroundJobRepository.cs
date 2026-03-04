@@ -33,7 +33,6 @@ public sealed class BackgroundJobRepository : IBackgroundJobRepository
     public async Task AddAsync(BackgroundJob job, CancellationToken cancellationToken = default)
     {
         await _db.BackgroundJobs.AddAsync(job, cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<BackgroundJob?> TryClaimNextAsync(string workerId, TimeSpan processingTimeout, int maxRetries, CancellationToken cancellationToken = default)

@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using StudyPilot.Application.Abstractions.Chat;
 using StudyPilot.Application.Abstractions.Knowledge;
 using StudyPilot.Application.Abstractions.Observability;
 using StudyPilot.Application.Abstractions.Persistence;
@@ -30,7 +31,7 @@ public sealed class StreamChatMessageQueryHandler : IRequestHandler<StreamChatMe
     private readonly IEmbeddingService _embeddingService;
     private readonly IQueryEmbeddingCache _embeddingCache;
     private readonly IHybridSearchService _hybridSearch;
-    private readonly IChatService _chatService;
+    private readonly IStreamCompletionQueue _streamCompletionQueue;
     private readonly IUserConceptMasteryRepository _masteryRepository;
     private readonly ICorrelationIdAccessor? _correlationIdAccessor;
     private readonly ILogger<StreamChatMessageQueryHandler>? _logger;
@@ -43,7 +44,7 @@ public sealed class StreamChatMessageQueryHandler : IRequestHandler<StreamChatMe
         IEmbeddingService embeddingService,
         IQueryEmbeddingCache embeddingCache,
         IHybridSearchService hybridSearch,
-        IChatService chatService,
+        IStreamCompletionQueue streamCompletionQueue,
         IUserConceptMasteryRepository masteryRepository,
         ICorrelationIdAccessor? correlationIdAccessor = null,
         ILogger<StreamChatMessageQueryHandler>? logger = null)
@@ -55,7 +56,7 @@ public sealed class StreamChatMessageQueryHandler : IRequestHandler<StreamChatMe
         _embeddingService = embeddingService;
         _embeddingCache = embeddingCache;
         _hybridSearch = hybridSearch;
-        _chatService = chatService;
+        _streamCompletionQueue = streamCompletionQueue;
         _masteryRepository = masteryRepository;
         _correlationIdAccessor = correlationIdAccessor;
         _logger = logger;
@@ -132,69 +133,12 @@ public sealed class StreamChatMessageQueryHandler : IRequestHandler<StreamChatMe
             explanationStyle);
 
         var channel = Channel.CreateUnbounded<string>();
-        var sb = new System.Text.StringBuilder();
+        var writer = new ChannelWriterStreamTokenWriter(channel.Writer);
+        var workItem = new StreamCompletionWorkItem(chatRequest, retrieved);
         var tcsComplete = new TaskCompletionSource();
         var statusTcs = new TaskCompletionSource<ChatStatus>();
 
-        _ = Task.Run(async () =>
-        {
-            var status = ChatStatus.Ok;
-            try
-            {
-                var streamResult = await _chatService.StreamChatAsync(chatRequest, async token =>
-                {
-                    sb.Append(token);
-                    await channel.Writer.WriteAsync(token, cancellationToken).ConfigureAwait(false);
-                }, cancellationToken).ConfigureAwait(false);
-
-                if (streamResult.FallbackUsed)
-                    status = ChatStatus.Fallback;
-
-                channel.Writer.Complete();
-
-                var fullText = sb.ToString().Trim();
-                if (string.IsNullOrWhiteSpace(fullText))
-                {
-                    fullText = "I'm temporarily unable to get a response. Please try again shortly.";
-                    status = ChatStatus.Fallback;
-                }
-                var assistantMessage = new ChatMessage(session.Id, ChatRole.Assistant, fullText);
-                await _chatMessageRepository.AddAsync(assistantMessage, cancellationToken).ConfigureAwait(false);
-                await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-                var allowedChunkIds = new HashSet<Guid>(retrieved.Select(c => c.ChunkId));
-                var cited = (streamResult.CitedChunkIds ?? Array.Empty<Guid>()).Where(allowedChunkIds.Contains).Distinct().ToList();
-                if (cited.Count > 0)
-                {
-                    await _citationRepository.AddRangeAsync(assistantMessage.Id, cited, cancellationToken).ConfigureAwait(false);
-                    await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                }
-                statusTcs.TrySetResult(status);
-                tcsComplete.SetResult();
-            }
-            catch (OperationCanceledException)
-            {
-                channel.Writer.Complete();
-                statusTcs.TrySetResult(ChatStatus.Error);
-                tcsComplete.SetCanceled();
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Stream chat provider failed request_id={RequestId} session_id={SessionId}", _correlationIdAccessor?.Get(), request.SessionId);
-                var fallback = "I'm temporarily unable to reach the AI provider. Please try again shortly.";
-                try { await channel.Writer.WriteAsync(fallback, cancellationToken).ConfigureAwait(false); } catch { /* ignore */ }
-                channel.Writer.Complete();
-                var assistantMsg = new ChatMessage(session.Id, ChatRole.Assistant, fallback);
-                try
-                {
-                    await _chatMessageRepository.AddAsync(assistantMsg, cancellationToken).ConfigureAwait(false);
-                    await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch { /* best effort persist */ }
-                statusTcs.TrySetResult(ChatStatus.Error);
-                tcsComplete.TrySetResult();
-            }
-        }, cancellationToken);
+        await _streamCompletionQueue.EnqueueAsync(workItem, writer, tcsComplete, statusTcs, cancellationToken).ConfigureAwait(false);
 
         return Result<StreamChatMessageResult>.Success(new StreamChatMessageResult(
             channel.Reader.ReadAllAsync(cancellationToken),

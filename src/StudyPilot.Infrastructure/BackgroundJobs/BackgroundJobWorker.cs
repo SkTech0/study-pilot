@@ -48,6 +48,7 @@ public sealed class BackgroundJobWorker : BackgroundService
                 await using var scope = _scopeFactory.CreateAsyncScope();
                 var jobRepository = scope.ServiceProvider.GetRequiredService<IBackgroundJobRepository>();
                 var documentRepository = scope.ServiceProvider.GetRequiredService<IDocumentRepository>();
+                var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                 var jobFactory = scope.ServiceProvider.GetRequiredService<IDocumentProcessingJobFactory>();
 
                 await jobRepository.ReleaseStuckJobsAsync(processingTimeout, stoppingToken);
@@ -61,6 +62,7 @@ public sealed class BackgroundJobWorker : BackgroundService
                         if (await jobRepository.ExistsPendingOrProcessingForDocumentAsync(docId, stoppingToken))
                             continue;
                         await documentRepository.ResetToPendingAsync(docId, stoppingToken);
+                        await unitOfWork.SaveChangesAsync(stoppingToken);
                         await _jobQueue.EnqueueDocumentProcessingAsync(docId, null, stoppingToken);
                         _logger.LogInformation("Stuck document recovered DocumentId={DocumentId}", docId);
                     }
@@ -103,6 +105,7 @@ public sealed class BackgroundJobWorker : BackgroundService
                     {
                         StudyPilotMetrics.JobRetriesTotal.Add(1, new KeyValuePair<string, object?>("queue", "background"));
                         await documentRepository.ResetToPendingAsync(job.DocumentId, stoppingToken);
+                        await unitOfWork.SaveChangesAsync(stoppingToken);
                     }
                     StudyPilotMetrics.BackgroundJobFailuresTotal.Add(1);
                     _logger.LogWarning("StepComplete JobId={JobId} DocumentId={DocumentId} StepName=job_failed CorrelationId={CorrelationId} RetryCount={RetryCount} AllowRetry={AllowRetry}",
@@ -119,6 +122,7 @@ public sealed class BackgroundJobWorker : BackgroundService
                     {
                         StudyPilotMetrics.JobRetriesTotal.Add(1, new KeyValuePair<string, object?>("queue", "background"));
                         await documentRepository.ResetToPendingAsync(job.DocumentId, stoppingToken);
+                        await unitOfWork.SaveChangesAsync(stoppingToken);
                     }
                     StudyPilotMetrics.BackgroundJobFailuresTotal.Add(1);
                     _logger.LogError(ex,
